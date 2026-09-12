@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>403 — доступ запрещён</title>
+<style>
+  html, body {
+    margin: 0; height: 100%;
+    background: #14201F;
+    color: #EFEDE3;
+    font-family: 'Courier New', monospace;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .wrap { text-align: center; padding: 24px; }
+  .code {
+    font-size: clamp(64px, 14vw, 140px);
+    font-weight: 700;
+    letter-spacing: 2px;
+    line-height: 1;
+    position: relative;
+    color: #EFEDE3;
+    animation: flicker 4s infinite;
+  }
+  .code::before, .code::after {
+    content: '403';
+    position: absolute; top: 0; left: 0; right: 0;
+    opacity: 0.7;
+  }
+  .code::before { color: #B23A48; animation: glitch-1 2.6s infinite linear alternate-reverse; }
+  .code::after { color: #2F5D62; animation: glitch-2 3.1s infinite linear alternate-reverse; }
+  @keyframes flicker {
+    0%, 92%, 100% { opacity: 1; }
+    93% { opacity: .4; }
+    94% { opacity: 1; }
+    95% { opacity: .6; }
+    96% { opacity: 1; }
+  }
+  @keyframes glitch-1 {
+    0% { transform: translate(0,0); clip-path: inset(0 0 80% 0); }
+    20% { transform: translate(-3px,1px); clip-path: inset(10% 0 60% 0); }
+    40% { transform: translate(2px,-1px); clip-path: inset(40% 0 30% 0); }
+    60% { transform: translate(-2px,0); clip-path: inset(60% 0 10% 0); }
+    80% { transform: translate(3px,1px); clip-path: inset(80% 0 0 0); }
+    100% { transform: translate(0,0); clip-path: inset(0 0 90% 0); }
+  }
+  @keyframes glitch-2 {
+    0% { transform: translate(0,0); clip-path: inset(85% 0 0 0); }
+    25% { transform: translate(3px,-1px); clip-path: inset(55% 0 20% 0); }
+    50% { transform: translate(-3px,1px); clip-path: inset(20% 0 60% 0); }
+    75% { transform: translate(2px,1px); clip-path: inset(0 0 80% 0); }
+    100% { transform: translate(0,0); clip-path: inset(90% 0 0 0); }
+  }
+  .msg { margin-top: 18px; font-size: 15px; letter-spacing: .5px; color: #B7BDB0; }
+  .msg strong { color: #EFEDE3; }
+  a.back {
+    display: inline-block; margin-top: 26px;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: #C9A227; text-decoration: none; font-weight: 700; font-size: 13.5px;
+    border: 1px solid #3A4A46; padding: 10px 18px; border-radius: 4px;
+  }
+  a.back:hover { border-color: #C9A227; }
+  @media (prefers-reduced-motion: reduce) {
+    .code, .code::before, .code::after { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="code" aria-hidden="true">403</div>
+    <p class="msg"><strong>Доступ запрещён.</strong><br>У вашей учётной записи нет прав администратора.</p>
+    <a class="back" href="/">← Вернуться в магазин</a>
+  </div>
+</body>
+</html>

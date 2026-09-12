@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Корзина — Сорока</title>
+<link rel="stylesheet" href="/css/style.css">
+<script>try{if(localStorage.getItem('soroka-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+</head>
+<body>
+<header class="site-header"><div id="site-header"></div></header>
+
+<main class="container-wide section">
+  <nav class="crumbs"><a href="/">Главная</a> / <span>Корзина</span></nav>
+  <h1>Корзина</h1>
+  <div id="cart-root">
+    <div class="skeleton" style="height:80px; margin-bottom:12px;"></div>
+    <div class="skeleton" style="height:80px;"></div>
+  </div>
+</main>
+
+<footer class="site-footer"><div id="site-footer"></div></footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/main.js"></script>
+<script src="/js/cart.js"></script>
+</body>
+</html>

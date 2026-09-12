@@ -1,0 +1,22 @@
+# Render Blueprint - деплой одним кликом через "New +" -> "Blueprint" на render.com,
+# указав этот GitHub-репозиторий (Render сам находит render.yaml в корне).
+#
+# ВАЖНО про базу данных: на бесплатном плане Render диск эфемерный - он
+# очищается при каждом новом деплое (но сохраняется между обычными
+# перезапусками/сном сервиса). Это значит, что после каждого git push
+# с изменениями база пересоздастся заново с тестовыми данными (это не
+# баг - так работает автосидирование в server/index.js). Для настоящей
+# постоянной базы между деплоями нужен платный план с Persistent Disk
+# (Render -> Disks) или вынос БД во внешний сервис.
+services:
+  - type: web
+    name: soroka-shop
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_VERSION
+        value: 20.18.0

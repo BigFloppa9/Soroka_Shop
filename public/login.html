@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Вход — Сорока</title>
+<link rel="stylesheet" href="/css/style.css">
+<script>try{if(localStorage.getItem('soroka-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+</head>
+<body>
+<header class="site-header"><div id="site-header"></div></header>
+
+<main class="container">
+  <div class="auth-shell panel">
+    <h1>С возвращением</h1>
+    <p>Войдите, чтобы оформлять заказы и сохранять избранное.</p>
+    <div class="alert alert-error" id="form-error"></div>
+    <form id="login-form">
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="password">Пароль</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Войти</button>
+    </form>
+    <p style="margin-top:16px; font-size:13.5px;">Ещё нет аккаунта? <a href="/register.html" style="color:var(--teal-dark); font-weight:700;">Зарегистрироваться</a></p>
+    <p class="footer-note" style="margin-top:20px;">Для проверки: client@example.com / client123</p>
+  </div>
+</main>
+
+<footer class="site-footer"><div id="site-footer"></div></footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/main.js"></script>
+<script>
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('form-error');
+  errEl.classList.remove('show');
+  const form = e.target;
+  try {
+    await api.post('/api/auth/login', { email: form.email.value, password: form.password.value });
+    const next = new URLSearchParams(location.search).get('next');
+    location.href = next || '/account.html';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.add('show');
+  }
+});
+</script>
+</body>
+</html>

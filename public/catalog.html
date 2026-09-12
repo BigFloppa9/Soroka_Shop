@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Каталог — Сорока</title>
+<link rel="stylesheet" href="/css/style.css">
+<script>try{if(localStorage.getItem('soroka-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+</head>
+<body>
+<header class="site-header"><div id="site-header"></div></header>
+
+<main class="container-wide section">
+  <nav class="crumbs" id="crumbs"><a href="/">Главная</a> / <a href="/catalog.html">Каталог</a></nav>
+  <h1 id="catalog-title">Каталог</h1>
+
+  <div class="catalog-layout">
+    <aside class="filters">
+      <h3>Цена, ₽</h3>
+      <form id="filter-form">
+        <div class="filter-group">
+          <div class="price-inputs">
+            <input type="number" min="0" name="min" placeholder="от">
+            <input type="number" min="0" name="max" placeholder="до">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block btn-sm">Применить</button>
+        <button type="button" id="reset-filters" class="btn btn-ghost btn-block btn-sm">Сбросить</button>
+      </form>
+    </aside>
+
+    <div>
+      <div class="catalog-toolbar">
+        <span class="result-count" id="result-count"></span>
+        <select id="sort-select">
+          <option value="new">Сначала новые</option>
+          <option value="popular">Популярные</option>
+          <option value="price_asc">Сначала дешевле</option>
+          <option value="price_desc">Сначала дороже</option>
+          <option value="rating">По рейтингу</option>
+        </select>
+      </div>
+      <div class="product-grid" id="product-grid"></div>
+      <div id="pagination" style="display:flex; justify-content:center; gap:8px; margin-top:32px;"></div>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer"><div id="site-footer"></div></footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/main.js"></script>
+<script src="/js/catalog.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Админ-панель — Сорока</title>
+<link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+<div id="gate">
+  <div class="admin-shell" id="admin-shell" style="display:none;">
+    <aside class="admin-sidebar">
+      <div class="brand">Сорока<small>АДМИН-ПАНЕЛЬ</small></div>
+      <button data-route="overview">Обзор</button>
+      <button data-route="products">Товары</button>
+      <button data-route="categories">Категории</button>
+      <button data-route="orders">Заказы</button>
+      <button data-route="users">Пользователи</button>
+      <button data-route="coupons" data-owner-only>Купоны</button>
+      <button data-route="announcements" data-owner-only>Объявления</button>
+      <button data-route="settings">Настройки магазина</button>
+      <button class="exit" id="exit-admin">← Выйти в магазин</button>
+    </aside>
+    <main class="admin-main">
+      <div class="admin-topbar">
+        <h1 id="page-title">Обзор</h1>
+        <div class="who" id="who"></div>
+      </div>
+      <div id="admin-content"></div>
+    </main>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/admin/js/app.js"></script>
+<script src="/admin/js/overview.js"></script>
+<script src="/admin/js/products.js"></script>
+<script src="/admin/js/categories.js"></script>
+<script src="/admin/js/orders.js"></script>
+<script src="/admin/js/users.js"></script>
+<script src="/admin/js/coupons.js"></script>
+<script src="/admin/js/announcements.js"></script>
+<script src="/admin/js/settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сорока — интернет-магазин</title>
+<link rel="stylesheet" href="/css/style.css">
+<script>try{if(localStorage.getItem('soroka-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+</head>
+<body>
+<header class="site-header"><div id="site-header"></div></header>
+
+<main>
+  <section class="container-wide hero">
+    <div>
+      <div class="hero-eyebrow">Новый заход, старые повадки</div>
+      <h1>Всего понемногу — и всё стоящее</h1>
+      <p class="lead">Одежда, электроника, книги, продукты и мелочи для дома — собрали в одном месте то, что обычно ищешь по пять вкладок сразу.</p>
+      <div class="hero-actions">
+        <a href="/catalog.html" class="btn btn-gold">Смотреть каталог</a>
+        <a href="/catalog.html?sort=popular" class="btn btn-outline">Популярное</a>
+      </div>
+    </div>
+    <div class="hero-art">
+      <svg viewBox="0 0 320 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="160" cy="160" r="150" fill="#E4E1D3"/>
+        <g stroke="#1E2A28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M70 190c0-64 46-112 118-112 46 0 70 24 86 46l-32 16 24 24-40 8 8 32-48-8c-16 32-46 46-78 46-46 0-70-24-70-52Z"/>
+          <circle cx="112" cy="130" r="4" fill="#1E2A28" stroke="none"/>
+        </g>
+        <g stroke="#C9A227" stroke-width="2" opacity="0.8">
+          <circle cx="235" cy="88" r="7" fill="none"/>
+          <rect x="52" y="70" width="14" height="14" fill="none"/>
+          <path d="M245 220 l10 10 -10 10 -10 -10Z" fill="none"/>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <section class="container-wide section">
+    <div class="section-head"><h2>Категории</h2></div>
+    <div class="cat-row" id="cat-row">
+      <div class="cat-tile skeleton" style="height:96px;"></div>
+      <div class="cat-tile skeleton" style="height:96px;"></div>
+      <div class="cat-tile skeleton" style="height:96px;"></div>
+    </div>
+  </section>
+
+  <section class="container-wide section">
+    <div class="section-head">
+      <h2>Популярное сейчас</h2>
+      <a class="link" href="/catalog.html?sort=popular">Всё популярное →</a>
+    </div>
+    <div class="product-grid" id="popular-grid"></div>
+  </section>
+</main>
+
+<footer class="site-footer"><div id="site-footer"></div></footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/main.js"></script>
+<script src="/js/home.js"></script>
+</body>
+</html>

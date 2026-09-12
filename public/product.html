@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Товар — Сорока</title>
+<link rel="stylesheet" href="/css/style.css">
+<script>try{if(localStorage.getItem('soroka-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+</head>
+<body>
+<header class="site-header"><div id="site-header"></div></header>
+
+<main class="container-wide section" id="pdp-root">
+  <nav class="crumbs">
+    <a href="/">Главная</a> / <a href="/catalog.html" id="crumb-cat">Каталог</a> / <span id="crumb-title">Товар</span>
+  </nav>
+
+  <div class="pdp" id="pdp">
+    <div>
+      <div class="gallery-main skeleton" id="gallery-main" style="height:440px;"></div>
+      <div class="gallery-thumbs" id="gallery-thumbs"></div>
+    </div>
+    <div id="pdp-info">
+      <div class="skeleton" style="height:28px; width:70%; margin-bottom:12px;"></div>
+      <div class="skeleton" style="height:20px; width:40%;"></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button data-tab="description" class="active">Описание</button>
+    <button data-tab="reviews">Отзывы <span id="review-count-tab"></span></button>
+  </div>
+
+  <div class="tab-panel active" data-panel="description">
+    <p id="pdp-description"></p>
+  </div>
+
+  <div class="tab-panel" data-panel="reviews">
+    <div id="reviews-list"></div>
+
+    <div class="panel" id="review-form-wrap" style="margin-top:20px; max-width:520px;">
+      <h3>Оставить отзыв</h3>
+      <form id="review-form">
+        <div class="field">
+          <label>Оценка</label>
+          <div class="star-input" id="rating-star-input" data-value="0">
+            <button type="button" data-star="1">★</button>
+            <button type="button" data-star="2">★</button>
+            <button type="button" data-star="3">★</button>
+            <button type="button" data-star="4">★</button>
+            <button type="button" data-star="5">★</button>
+          </div>
+          <input type="hidden" name="rating" value="0">
+        </div>
+        <div class="field">
+          <label>Комментарий</label>
+          <textarea name="text" placeholder="Расскажите, как вам товар"></textarea>
+        </div>
+        <label class="check-row" style="margin-bottom:14px;">
+          <input type="checkbox" name="anonymous"> Оставить отзыв анонимно
+        </label>
+        <div class="alert alert-error" id="review-error"></div>
+        <button type="submit" class="btn btn-primary">Отправить отзыв</button>
+      </form>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer"><div id="site-footer"></div></footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/main.js"></script>
+<script src="/js/product.js"></script>
+</body>
+</html>

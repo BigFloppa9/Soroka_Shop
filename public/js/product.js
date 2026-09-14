@@ -27,6 +27,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       isFavored = Site.favoriteIds.has(product.id);
       updateFavButton();
     }
+
+    rememberRecentlyViewed(product.id);
+    loadRecommendations(product.id);
   } catch (e) {
     infoEl.innerHTML = `<p>${escapeHtml(e.message || 'Товар не найден')}</p>`;
     galleryMain.classList.remove('skeleton');
@@ -58,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         ${p.old_price ? `<span class="price-old">${fmtPrice(p.old_price)}</span>` : ''}
         ${discount ? `<span class="badge" style="position:static;">-${discount}%</span>` : ''}
       </div>
-      <p class="stock-note">${stockBadgeHtml(p.stock)}</p>
+      <p class="stock-note">${stockBadgeHtml(p.stock, p.always_low_stock)}</p>
       <div class="pdp-actions">
         <div class="qty-stepper">
           <button type="button" id="qty-minus" aria-label="Меньше">–</button>
@@ -197,5 +200,51 @@ document.addEventListener('DOMContentLoaded', async () => {
         errEl.classList.add('show');
       }
     });
+  }
+
+  function rememberRecentlyViewed(productId) {
+    let ids = [];
+    try { ids = JSON.parse(localStorage.getItem('soroka-recently-viewed') || '[]'); } catch (e) {}
+    ids = ids.filter(x => x !== productId);
+    ids.unshift(productId);
+    ids = ids.slice(0, 8);
+    try { localStorage.setItem('soroka-recently-viewed', JSON.stringify(ids)); } catch (e) {}
+  }
+
+  async function loadRecommendations(productId) {
+    const root = document.getElementById('recs-root');
+    let sectionsHtml = '';
+
+    try {
+      const { similar, oftenBoughtWith } = await api.get(`/api/products/${productId}/related`);
+      if (oftenBoughtWith.length) {
+        sectionsHtml += recsSectionHtml('С этим товаром часто берут', oftenBoughtWith);
+      }
+      if (similar.length) {
+        sectionsHtml += recsSectionHtml('Может вам понравиться', similar);
+      }
+    } catch (e) {}
+
+    try {
+      let viewedIds = [];
+      try { viewedIds = JSON.parse(localStorage.getItem('soroka-recently-viewed') || '[]'); } catch (e) {}
+      viewedIds = viewedIds.filter(x => x !== productId).slice(0, 8);
+      if (viewedIds.length) {
+        const { products } = await api.get(`/api/products/batch?ids=${viewedIds.join(',')}`);
+        if (products.length) sectionsHtml += recsSectionHtml('Вы недавно смотрели', products);
+      }
+    } catch (e) {}
+
+    root.innerHTML = sectionsHtml;
+    wireProductGridEvents(root);
+  }
+
+  function recsSectionHtml(title, products) {
+    return `
+      <section class="section">
+        <h2>${escapeHtml(title)}</h2>
+        <div class="product-grid">${products.map(productCardHtml).join('')}</div>
+      </section>
+    `;
   }
 });

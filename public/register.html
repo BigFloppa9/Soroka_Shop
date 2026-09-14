@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
 <title>Регистрация — Сорока</title>
 <link rel="stylesheet" href="/css/style.css">
-<script>try{if(localStorage.getItem('soroka-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+<script>try{var t=localStorage.getItem('soroka-theme');if(t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')}catch(e){}</script>
 </head>
 <body>
 <header class="site-header"><div id="site-header"></div></header>
@@ -42,8 +43,12 @@
 <footer class="site-footer"><div id="site-footer"></div></footer>
 
 <script src="/js/api.js"></script>
+<script src="/js/idle-ping.js"></script>
 <script src="/js/main.js"></script>
 <script>
+api.get('/api/auth/me').then(({ user }) => {
+  if (user) location.href = '/';
+}).catch(() => {});
 document.getElementById('register-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const errEl = document.getElementById('form-error');

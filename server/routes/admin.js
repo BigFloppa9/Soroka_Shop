@@ -1,23 +1,27 @@
-const os = require('os');
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const db = require('../db');
 const { requireAdmin, requireOwner } = require('../middleware/auth');
 const { generateProductImages } = require('../gen-images');
+const { decrypt } = require('../crypto-util');
 
 const router = express.Router();
 router.use(requireAdmin);
 
-function lanUrl(req) {
-  const nets = os.networkInterfaces();
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name] || []) {
-      if (net.family === 'IPv4' && !net.internal) return `http://${net.address}:${process.env.PORT || 3000}`;
-    }
-  }
-  return null;
+// ---- Обзор / статистика ----
+function toSqliteTimestamp(isoOrDate) {
+  const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+  return d.toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
 }
 
-// ---- Обзор / статистика ----
+router.get('/activity', (req, res) => {
+  const since = toSqliteTimestamp(req.query.since || new Date(Date.now() - 60000));
+  const orders = db.prepare('SELECT id, created_at FROM orders WHERE created_at > ? ORDER BY created_at ASC').all(since);
+  const users = db.prepare("SELECT id, name, created_at FROM users WHERE created_at > ? AND deleted_at IS NULL ORDER BY created_at ASC").all(since);
+  res.json({ orders, users, now: new Date().toISOString() });
+});
+
 router.get('/stats', (req, res) => {
   const productCount = db.prepare('SELECT COUNT(*) c FROM products').get().c;
   const orderCount = db.prepare('SELECT COUNT(*) c FROM orders').get().c;
@@ -25,7 +29,7 @@ router.get('/stats', (req, res) => {
   const revenue = db.prepare(`SELECT COALESCE(SUM(total),0) s FROM orders WHERE status != 'cancelled'`).get().s;
   const newOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE status = 'new'`).get().c;
   const lowStock = db.prepare('SELECT COUNT(*) c FROM products WHERE stock <= 5').get().c;
-  res.json({ productCount, orderCount, userCount, revenue, newOrders, lowStock, lanUrl: lanUrl(req) });
+  res.json({ productCount, orderCount, userCount, revenue, newOrders, lowStock });
 });
 
 // ---- Категории ----
@@ -79,7 +83,7 @@ router.get('/products', (req, res) => {
 });
 
 router.post('/products', (req, res) => {
-  const { title, category_id, price, old_price, description, stock } = req.body || {};
+  const { title, category_id, price, old_price, description, stock, icon_shape } = req.body || {};
   if (!title?.trim() || !category_id || !price) {
     return res.status(400).json({ error: 'Заполните название, категорию и цену' });
   }
@@ -89,12 +93,12 @@ router.post('/products', (req, res) => {
   const accents = { clothing: '#B23A48', electronics: '#2F5D62', food: '#C9A227', home: '#6B4226', books: '#3B5BA5', beauty: '#8A5A83' };
   const accent = accents[category.slug] || '#2F5D62';
   const slugBase = `${category.slug}-${Date.now()}`;
-  const images = generateProductImages(slugBase, category.slug, accent, '#EFEDE3', 3);
+  const images = generateProductImages(slugBase, category.slug, accent, '#EFEDE3', 3, icon_shape || null);
 
   const info = db.prepare(`
-    INSERT INTO products (title, category_id, price, old_price, description, stock, images, accent, is_popular)
-    VALUES (?,?,?,?,?,?,?,?,0)
-  `).run(title.trim(), category_id, price, old_price || null, description || '', stock || 0, JSON.stringify(images), accent);
+    INSERT INTO products (title, category_id, price, old_price, description, stock, images, accent, is_popular, icon_shape, created_by)
+    VALUES (?,?,?,?,?,?,?,?,0,?,?)
+  `).run(title.trim(), category_id, price, old_price || null, description || '', stock || 0, JSON.stringify(images), accent, icon_shape || 'box', req.user.id);
 
   res.json({ product: db.prepare('SELECT * FROM products WHERE id = ?').get(info.lastInsertRowid) });
 });
@@ -102,7 +106,7 @@ router.post('/products', (req, res) => {
 router.put('/products/:id', (req, res) => {
   const p = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!p) return res.status(404).json({ error: 'Товар не найден' });
-  const { title, category_id, price, old_price, description, stock, is_popular } = req.body || {};
+  const { title, category_id, price, old_price, description, stock, is_popular, always_low_stock } = req.body || {};
   db.prepare(`
     UPDATE products SET
       title = COALESCE(?, title),
@@ -111,19 +115,65 @@ router.put('/products/:id', (req, res) => {
       old_price = ?,
       description = COALESCE(?, description),
       stock = COALESCE(?, stock),
-      is_popular = COALESCE(?, is_popular)
+      is_popular = COALESCE(?, is_popular),
+      always_low_stock = COALESCE(?, always_low_stock)
     WHERE id = ?
   `).run(
     title?.trim(), category_id, price,
     (old_price === undefined ? p.old_price : old_price),
     description, stock, (is_popular === undefined ? undefined : (is_popular ? 1 : 0)),
+    (always_low_stock === undefined ? undefined : (always_low_stock ? 1 : 0)),
     req.params.id
   );
   res.json({ product: db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id) });
 });
 
+router.put('/products/:id/icon', (req, res) => {
+  const p = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Товар не найден' });
+  if (req.user.role !== 'owner' && p.created_by !== req.user.id) {
+    return res.status(403).json({ error: 'Менять иконку может только владелец или админ, создавший этот товар' });
+  }
+
+  const { icon_shape, custom_icon_svg } = req.body || {};
+  const oldCustomIcon = p.custom_icon;
+
+  if (custom_icon_svg) {
+    const svg = String(custom_icon_svg).trim();
+    if (!svg.startsWith('<svg') || svg.length > 200000) {
+      return res.status(400).json({ error: 'Ожидается SVG-файл размером до 200KB' });
+    }
+    const dir = path.join(__dirname, '..', '..', 'public', 'images', 'custom-icons');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const fname = `icon-${p.id}-${Date.now()}.svg`;
+    fs.writeFileSync(path.join(dir, fname), svg, 'utf8');
+    const webPath = `/images/custom-icons/${fname}`;
+    db.prepare('UPDATE products SET custom_icon = ?, images = ? WHERE id = ?')
+      .run(webPath, JSON.stringify([webPath]), p.id);
+  } else if (icon_shape) {
+    const category = db.prepare('SELECT slug FROM categories WHERE id = ?').get(p.category_id);
+    const images = generateProductImages(`icon-${p.id}-${Date.now()}`, category.slug, p.accent, '#EFEDE3', 3, icon_shape);
+    db.prepare('UPDATE products SET icon_shape = ?, custom_icon = NULL, images = ? WHERE id = ?')
+      .run(icon_shape, JSON.stringify(images), p.id);
+  } else {
+    return res.status(400).json({ error: 'Укажите icon_shape или custom_icon_svg' });
+  }
+
+  if (oldCustomIcon) cleanupUnusedCustomIcon(oldCustomIcon);
+  res.json({ product: db.prepare('SELECT * FROM products WHERE id = ?').get(p.id) });
+});
+
+function cleanupUnusedCustomIcon(iconWebPath) {
+  const stillUsed = db.prepare('SELECT COUNT(*) c FROM products WHERE custom_icon = ?').get(iconWebPath).c;
+  if (stillUsed > 0) return;
+  const filePath = path.join(__dirname, '..', '..', 'public', iconWebPath.replace(/^\//, ''));
+  fs.unlink(filePath, () => {});
+}
+
 router.delete('/products/:id', (req, res) => {
+  const p = db.prepare('SELECT custom_icon FROM products WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
+  if (p?.custom_icon) cleanupUnusedCustomIcon(p.custom_icon);
   res.json({ ok: true });
 });
 
@@ -138,15 +188,35 @@ const ORDER_SORTS = {
 router.get('/orders', (req, res) => {
   const { status } = req.query;
   const sortKey = ORDER_SORTS[req.query.sort] ? req.query.sort : 'newest';
-  const where = status ? 'WHERE o.status = ?' : '';
+  const statusList = status ? status.split(',').filter(Boolean) : [];
+  const where = statusList.length ? `WHERE o.status IN (${statusList.map(() => '?').join(',')})` : '';
   const rows = db.prepare(`
     SELECT o.*, u.name as user_name, u.email as user_email
     FROM orders o JOIN users u ON u.id = o.user_id
     ${where}
     ORDER BY ${ORDER_SORTS[sortKey]}
-  `).all(...(status ? [status] : []));
+  `).all(...statusList);
   const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
-  res.json({ orders: rows.map(o => ({ ...o, items: items.all(o.id) })) });
+  res.json({ orders: rows.map(o => { delete o.card_encrypted; return { ...o, items: items.all(o.id) }; }) });
+});
+
+router.get('/orders/:id/card', requireOwner, (req, res) => {
+  const order = db.prepare('SELECT card_encrypted FROM orders WHERE id = ?').get(req.params.id);
+  if (!order || !order.card_encrypted) return res.status(404).json({ error: 'Номер карты недоступен для этого заказа' });
+  const digits = decrypt(order.card_encrypted);
+  if (!digits) return res.status(500).json({ error: 'Не удалось расшифровать номер' });
+  res.json({ card: digits.replace(/(.{4})/g, '$1 ').trim() });
+});
+
+router.delete('/orders/:id', (req, res) => {
+  const tx = db.transaction((orderId) => {
+    db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderId);
+    db.prepare('DELETE FROM notifications WHERE order_id = ?').run(orderId);
+    return db.prepare('DELETE FROM orders WHERE id = ?').run(orderId);
+  });
+  const info = tx(req.params.id);
+  if (info.changes === 0) return res.status(404).json({ error: 'Заказ не найден' });
+  res.json({ ok: true });
 });
 
 const ORDER_STATUSES = ['new', 'processing', 'shipped', 'done', 'cancelled'];
@@ -174,7 +244,7 @@ router.put('/reviews/:id/reply', (req, res) => {
 
 // ---- Пользователи ----
 router.get('/users', (req, res) => {
-  res.json({ users: db.prepare('SELECT id, name, email, role, status, frozen_until, freeze_reason, created_at FROM users ORDER BY created_at DESC').all() });
+  res.json({ users: db.prepare("SELECT id, name, email, role, status, frozen_until, freeze_reason, created_at FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC").all() });
 });
 
 // Смена роли — только владелец
@@ -230,6 +300,7 @@ router.delete('/users/:id', requireOwner, (req, res) => {
 
 // Очистка базы заказов — только владелец
 router.delete('/orders', requireOwner, (req, res) => {
+  db.prepare('DELETE FROM notifications WHERE order_id IS NOT NULL').run();
   db.prepare('DELETE FROM order_items').run();
   db.prepare('DELETE FROM orders').run();
   res.json({ ok: true });
@@ -245,16 +316,20 @@ router.post('/notifications', (req, res) => {
 
 // ---- Купоны — только владелец ----
 router.get('/coupons', requireOwner, (req, res) => {
-  res.json({ coupons: db.prepare('SELECT * FROM coupons ORDER BY created_at DESC').all() });
+  const coupons = db.prepare('SELECT * FROM coupons ORDER BY created_at DESC').all();
+  const usedCount = db.prepare('SELECT COUNT(*) c FROM orders WHERE coupon_code = ?');
+  res.json({ coupons: coupons.map(c => ({ ...c, used_count: usedCount.get(c.code).c })) });
 });
 router.post('/coupons', requireOwner, (req, res) => {
-  const { code, percent } = req.body || {};
+  const { code, percent, category_ids, usage_limit, per_user_once } = req.body || {};
   if (!code?.trim() || !percent || percent < 1 || percent > 90) {
     return res.status(400).json({ error: 'Укажите код и процент скидки (1-90)' });
   }
-  db.prepare(`INSERT INTO coupons (code, percent, active) VALUES (?,?,1)
-    ON CONFLICT(code) DO UPDATE SET percent = excluded.percent, active = 1`)
-    .run(code.trim().toUpperCase(), Math.round(percent));
+  const catJson = (Array.isArray(category_ids) && category_ids.length) ? JSON.stringify(category_ids) : null;
+  const limit = (usage_limit === '' || usage_limit == null) ? null : Math.max(1, parseInt(usage_limit, 10) || 1);
+  db.prepare(`INSERT INTO coupons (code, percent, active, category_ids, usage_limit, per_user_once) VALUES (?,?,1,?,?,?)
+    ON CONFLICT(code) DO UPDATE SET percent = excluded.percent, active = 1, category_ids = excluded.category_ids, usage_limit = excluded.usage_limit, per_user_once = excluded.per_user_once`)
+    .run(code.trim().toUpperCase(), Math.round(percent), catJson, limit, per_user_once ? 1 : 0);
   res.json({ coupon: db.prepare('SELECT * FROM coupons WHERE code = ?').get(code.trim().toUpperCase()) });
 });
 router.put('/coupons/:code', requireOwner, (req, res) => {
@@ -293,10 +368,12 @@ router.delete('/announcements/:id', requireOwner, (req, res) => {
 });
 
 // ---- Настройки магазина ----
+const SECRET_SETTINGS_KEYS = ['card_encryption_key'];
+
 router.get('/settings', (req, res) => {
   const rows = db.prepare('SELECT key, value FROM settings').all();
   const obj = {};
-  rows.forEach(r => { obj[r.key] = r.value; });
+  rows.forEach(r => { if (!SECRET_SETTINGS_KEYS.includes(r.key)) obj[r.key] = r.value; });
   res.json({ settings: obj });
 });
 
@@ -304,13 +381,47 @@ router.put('/settings', (req, res) => {
   const upsert = db.prepare(`INSERT INTO settings (key, value) VALUES (?,?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value`);
   const tx = db.transaction((entries) => {
-    for (const [k, v] of entries) upsert.run(k, typeof v === 'string' ? v : JSON.stringify(v));
+    for (const [k, v] of entries) {
+      if (SECRET_SETTINGS_KEYS.includes(k)) continue; // защита от перезаписи ключа шифрования через API настроек
+      upsert.run(k, typeof v === 'string' ? v : JSON.stringify(v));
+    }
   });
   tx(Object.entries(req.body || {}));
   const rows = db.prepare('SELECT key, value FROM settings').all();
   const obj = {};
-  rows.forEach(r => { obj[r.key] = r.value; });
+  rows.forEach(r => { if (!SECRET_SETTINGS_KEYS.includes(r.key)) obj[r.key] = r.value; });
   res.json({ settings: obj });
+});
+
+// ---- Миграция базы целиком (владелец) ----
+router.get('/migration/export', requireOwner, (req, res) => {
+  try {
+    db.pragma('wal_checkpoint(TRUNCATE)');
+  } catch (e) {}
+  const dbPath = path.join(__dirname, '..', 'data.sqlite');
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.download(dbPath, `soroka-migration-${stamp}.sqlite`);
+});
+
+router.post('/migration/import', requireOwner, express.raw({ type: '*/*', limit: '100mb' }), (req, res) => {
+  if (!req.body || !req.body.length) {
+    return res.status(400).json({ error: 'Файл базы не получен' });
+  }
+  const header = req.body.subarray(0, 16).toString('utf8');
+  if (!header.startsWith('SQLite format 3')) {
+    return res.status(400).json({ error: 'Это не похоже на файл базы SQLite (.sqlite)' });
+  }
+  const dbPath = path.join(__dirname, '..', 'data.sqlite');
+  try {
+    db.close();
+    fs.writeFileSync(dbPath, req.body);
+    try { fs.unlinkSync(dbPath + '-wal'); } catch (e) {}
+    try { fs.unlinkSync(dbPath + '-shm'); } catch (e) {}
+  } catch (e) {
+    return res.status(500).json({ error: 'Не удалось записать базу: ' + e.message });
+  }
+  res.json({ ok: true, note: 'База импортирована. Сервер сейчас перезапустится.' });
+  setTimeout(() => process.exit(0), 300);
 });
 
 module.exports = router;

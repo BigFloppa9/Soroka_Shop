@@ -55,9 +55,9 @@ function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
-function stockBadgeHtml(stock) {
+function stockBadgeHtml(stock, alwaysLow) {
   if (stock > 0) {
-    return `<span class="stock-badge in"><span class="dot"></span>В наличии${stock <= 5 ? ` (осталось ${stock})` : ''}</span>`;
+    return `<span class="stock-badge in"><span class="dot"></span>В наличии${(stock <= 5 || alwaysLow) ? ` (осталось ${stock})` : ''}</span>`;
   }
   return `<span class="stock-badge out"><span class="dot"></span>Нет в наличии</span>`;
 }
@@ -77,6 +77,7 @@ function productCardHtml(p) {
         <div class="cat-label">${escapeHtml(p.category_name || '')}</div>
         <div class="title"><a href="/product.html?id=${p.id}">${escapeHtml(p.title)}</a></div>
         ${p.avg_rating ? `<div class="rating"><span class="stars">${starString(p.avg_rating)}</span> ${p.avg_rating} (${p.review_count})</div>` : `<div class="rating">Пока нет отзывов</div>`}
+        ${(p.stock > 0 && (p.stock <= 10 || p.always_low_stock)) ? `<div class="low-stock-note">Осталось всего ${p.stock} шт.</div>` : ''}
         <div class="price-row">
           <span class="price">${fmtPrice(p.price)}</span>
           ${p.old_price ? `<span class="price-old">${fmtPrice(p.old_price)}</span>` : ''}
@@ -169,19 +170,82 @@ const Site = {
     this.renderHeader();
     this.renderFooter();
     this.renderAnnouncements();
+    try {
+      if (sessionStorage.getItem('soroka-revived') === '1') {
+        sessionStorage.removeItem('soroka-revived');
+        toast('С возвращением! Аккаунт восстановлен.');
+      }
+    } catch (e) {}
   },
 
   applyStoredTheme() {
     try {
-      if (localStorage.getItem('soroka-theme') === 'dark') document.documentElement.classList.add('dark');
+      const stored = localStorage.getItem('soroka-theme');
+      const wantDark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (wantDark) document.documentElement.classList.add('dark');
     } catch (e) {}
+  },
+
+  wireSearchSuggest() {
+    const input = document.querySelector('#search-form input[name="search"]');
+    const box = document.getElementById('search-suggest');
+    if (!input || !box) return;
+    let timer = null;
+    let items = [];
+    let activeIndex = -1;
+
+    function renderItems() {
+      if (!items.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+      box.innerHTML = items.map((t, i) => `<div class="search-suggest-item${i === activeIndex ? ' active' : ''}" data-i="${i}">${escapeHtml(t)}</div>`).join('');
+      box.classList.remove('hidden');
+    }
+
+    function pick(text) {
+      input.value = text;
+      box.classList.add('hidden');
+      location.href = '/catalog.html?search=' + encodeURIComponent(text);
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim();
+      clearTimeout(timer);
+      if (q.length < 2) { items = []; renderItems(); return; }
+      timer = setTimeout(async () => {
+        try {
+          const { suggestions } = await api.get('/api/products/suggest?q=' + encodeURIComponent(q));
+          items = suggestions;
+          activeIndex = -1;
+          renderItems();
+        } catch (e) { /* тихо игнорируем — подсказки необязательны */ }
+      }, 200);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (box.classList.contains('hidden') || !items.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = Math.min(items.length - 1, activeIndex + 1); renderItems(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(0, activeIndex - 1); renderItems(); }
+      else if (e.key === 'Enter' && activeIndex >= 0) { e.preventDefault(); pick(items[activeIndex]); }
+      else if (e.key === 'Escape') { box.classList.add('hidden'); }
+    });
+
+    box.addEventListener('mousedown', (e) => {
+      const item = e.target.closest('.search-suggest-item');
+      if (item) pick(items[Number(item.dataset.i)]);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#search-form')) box.classList.add('hidden');
+    });
   },
 
   toggleTheme() {
     const isDark = document.documentElement.classList.toggle('dark');
     try { localStorage.setItem('soroka-theme', isDark ? 'dark' : 'light'); } catch (e) {}
     const btn = document.getElementById('theme-toggle');
-    if (btn) btn.innerHTML = isDark ? ICONS.sun : ICONS.moon;
+    if (btn) {
+      btn.innerHTML = isDark ? ICONS.sun : ICONS.moon;
+      btn.title = isDark ? 'Переключить на светлую тему' : 'Переключить на тёмную тему';
+    }
   },
 
   async loadUser() {
@@ -255,22 +319,23 @@ const Site = {
     el.innerHTML = `
       <div class="container-wide header-row">
         <a href="/" class="logo">${MAGPIE_MARK}<span>Сорока</span></a>
-        <form class="header-search" id="search-form">
-          <input type="search" name="search" placeholder="Что ищем сегодня?" value="${escapeHtml(q)}" aria-label="Поиск товаров">
-          <button type="submit" aria-label="Найти">${ICONS.search}</button>
+        <form class="header-search" id="search-form" style="position:relative;">
+          <input type="search" name="search" placeholder="Что ищем сегодня?" value="${escapeHtml(q)}" aria-label="Поиск товаров" autocomplete="off">
+          <button type="submit" aria-label="Найти" title="Найти">${ICONS.search}</button>
+          <div class="search-suggest hidden" id="search-suggest"></div>
         </form>
         <div class="header-actions">
-          <button class="icon-btn" id="theme-toggle" aria-label="Тема оформления">${isDark ? ICONS.sun : ICONS.moon}</button>
+          <button class="icon-btn" id="theme-toggle" aria-label="Тема оформления" title="${isDark ? 'Переключить на светлую тему' : 'Переключить на тёмную тему'}">${isDark ? ICONS.sun : ICONS.moon}</button>
           ${isStaff ? `<a class="icon-btn hammer" href="/admin" aria-label="Панель администратора" title="Панель администратора">${ICONS.hammer}</a>` : ''}
           ${this.user ? `
           <div style="position:relative;">
-            <button class="icon-btn" id="notif-btn" aria-label="Уведомления">${ICONS.bell}<span class="icon-badge hidden" id="notif-badge">0</span></button>
+            <button class="icon-btn" id="notif-btn" aria-label="Уведомления" title="Уведомления">${ICONS.bell}<span class="icon-badge hidden" id="notif-badge">0</span></button>
             <div class="notif-panel hidden" id="notif-panel"></div>
           </div>` : ''}
-          <a class="icon-btn" href="/account.html?tab=favorites" aria-label="Избранное">${ICONS.heart}<span class="icon-badge hidden" id="fav-badge">0</span></a>
-          <a class="icon-btn" href="/cart.html" aria-label="Корзина">${ICONS.bag}<span class="icon-badge hidden" id="cart-badge">0</span></a>
+          <a class="icon-btn" href="/account.html?tab=favorites" aria-label="Избранное" title="Избранное">${ICONS.heart}<span class="icon-badge hidden" id="fav-badge">0</span></a>
+          <a class="icon-btn" href="/cart.html" aria-label="Корзина" title="Корзина">${ICONS.bag}<span class="icon-badge hidden" id="cart-badge">0</span></a>
           ${this.user
-            ? `<a class="icon-btn" href="/account.html" aria-label="Личный кабинет">${ICONS.user}</a>`
+            ? `<a class="icon-btn" href="/account.html" aria-label="Личный кабинет" title="Личный кабинет">${ICONS.user}</a>`
             : `<a class="btn btn-outline btn-sm" href="/login.html">Войти</a>`}
         </div>
       </div>
@@ -282,6 +347,7 @@ const Site = {
       const val = e.target.search.value.trim();
       location.href = '/catalog.html' + (val ? `?search=${encodeURIComponent(val)}` : '');
     });
+    this.wireSearchSuggest();
     this.loadNavCategories();
     this.refreshCartBadge();
     this.refreshFavBadge();
@@ -367,10 +433,8 @@ const Site = {
         <div>
           <div class="logo" style="margin-bottom:10px;">${MAGPIE_MARK}<span>Сорока</span></div>
           <p id="footer-desc" style="max-width:38ch;">Собираем в одном месте всё самое нужное.</p>
-          <div class="footer-social">
-            <a href="#" aria-label="Telegram" title="Telegram">TG</a>
-            <a href="#" aria-label="ВКонтакте" title="ВКонтакте">VK</a>
-          </div>
+          <p id="footer-social-intro" class="hint hidden" style="margin:10px 0 6px;"></p>
+          <div class="footer-social" id="footer-social"></div>
         </div>
         <div>
           <h4>Покупателям</h4>
@@ -391,6 +455,7 @@ const Site = {
           <h4>Информация</h4>
           <ul>
             <li><a href="/privacy.html">Политика конфиденциальности</a></li>
+            <li><a href="/legal.html">Правовая информация</a></li>
             <li>
               <div class="footer-payments">
                 <span>Карта</span><span>СБП</span><span>Наличные</span>
@@ -408,6 +473,17 @@ const Site = {
       if (settings.store_phone) document.getElementById('footer-phone').textContent = settings.store_phone;
       if (settings.store_address) document.getElementById('footer-address').textContent = settings.store_address;
       if (settings.store_name) document.getElementById('footer-name').textContent = settings.store_name;
+      if (settings.social_intro) {
+        const introEl = document.getElementById('footer-social-intro');
+        introEl.textContent = settings.social_intro;
+        introEl.classList.remove('hidden');
+      }
+      let links = [];
+      try { links = JSON.parse(settings.social_links || '[]'); } catch (e) {}
+      const socialEl = document.getElementById('footer-social');
+      if (socialEl && links.length) {
+        socialEl.innerHTML = links.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" aria-label="${escapeHtml(l.prefix)}" title="${escapeHtml(l.prefix)}">${escapeHtml(l.prefix)}</a>`).join('');
+      }
     }).catch(() => {});
   },
 

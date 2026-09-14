@@ -1,5 +1,10 @@
 document.addEventListener('DOMContentLoaded', async () => {
   await Site.ready;
+  api.get('/api/settings').then(({ settings }) => {
+    if (settings.hero_eyebrow) document.getElementById('hero-eyebrow').textContent = settings.hero_eyebrow;
+    if (settings.hero_title) document.getElementById('hero-title').textContent = settings.hero_title;
+    if (settings.hero_subtitle) document.getElementById('hero-subtitle').textContent = settings.hero_subtitle;
+  }).catch(() => {});
   const catRow = document.getElementById('cat-row');
   const grid = document.getElementById('popular-grid');
   grid.innerHTML = Array(8).fill('<div class="product-card skeleton" style="height:300px;"></div>').join('');

@@ -3,21 +3,20 @@ Admin.register('products', async (root) => {
   Admin.startLive(() => { if (!document.getElementById('active-modal')) refreshProductsData(root); }, 10000);
 });
 
-let productsState = { sort: 'newest', category: '' };
+let productsState = { sort: 'newest', categories: [] };
+const PRODUCT_SORT_BY_HEADER = {
+  title: ['title'],
+  category: ['category'],
+  price: ['price_asc', 'price_desc'],
+  stock: ['stock'],
+};
 
 async function renderProducts(root) {
   root.innerHTML = `
     <div class="toolbar">
-      <div style="display:flex; gap:8px;">
-        <select id="cat-filter"><option value="">Все категории</option></select>
-        <select id="sort-filter">
-          <option value="newest">Сначала новые</option>
-          <option value="title">По названию</option>
-          <option value="price_asc">Цена: по возрастанию</option>
-          <option value="price_desc">Цена: по убыванию</option>
-          <option value="stock">По остатку</option>
-          <option value="category">По категории</option>
-        </select>
+      <div style="position:relative;">
+        <button type="button" class="btn btn-outline btn-sm" id="cat-filter-btn">Категории${productsState.categories.length ? ` (${productsState.categories.length})` : ''}</button>
+        <div class="checkbox-popover hidden" id="cat-filter-popover"></div>
       </div>
       <button class="btn btn-primary" id="add-prod-btn">+ Новый товар</button>
     </div>
@@ -28,26 +27,35 @@ async function renderProducts(root) {
   try {
     const catData = await api.get('/api/admin/categories');
     categories = catData.categories;
-    const sel = document.getElementById('cat-filter');
-    sel.innerHTML = '<option value="">Все категории</option>' +
-      categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
-    sel.value = productsState.category;
-    sel.addEventListener('change', () => { productsState.category = sel.value; draw(); });
-  } catch (e) {}
+    const popover = document.getElementById('cat-filter-popover');
+    popover.innerHTML = categories.map(c => `
+      <label class="check-row"><input type="checkbox" class="cat-cb" value="${c.id}" ${productsState.categories.includes(String(c.id)) ? 'checked' : ''}> ${escapeHtml(c.name)}</label>
+    `).join('') + `<button type="button" class="btn btn-outline btn-sm" id="cat-filter-clear" style="margin-top:6px;">Сбросить</button>`;
 
-  const sortSel = document.getElementById('sort-filter');
-  sortSel.value = productsState.sort;
-  sortSel.addEventListener('change', async () => {
-    productsState.sort = sortSel.value;
-    await refreshProductsData(root);
-  });
+    const filterBtn = document.getElementById('cat-filter-btn');
+    filterBtn.addEventListener('click', (e) => { e.stopPropagation(); popover.classList.toggle('hidden'); });
+    document.addEventListener('click', (e) => { if (!e.target.closest('#cat-filter-btn, #cat-filter-popover')) popover.classList.add('hidden'); });
+    popover.querySelectorAll('.cat-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        productsState.categories = [...popover.querySelectorAll('.cat-cb:checked')].map(x => x.value);
+        filterBtn.textContent = `Категории${productsState.categories.length ? ` (${productsState.categories.length})` : ''}`;
+        draw();
+      });
+    });
+    document.getElementById('cat-filter-clear').addEventListener('click', () => {
+      productsState.categories = [];
+      popover.querySelectorAll('.cat-cb').forEach(cb => { cb.checked = false; });
+      filterBtn.textContent = 'Категории';
+      draw();
+    });
+  } catch (e) {}
 
   document.getElementById('add-prod-btn').addEventListener('click', () => openProductModal(root, null, categories));
 
   await refreshProductsData(root, categories);
 
-  async function draw() {
-    refreshProductsData(root, categories);
+  function draw() {
+    drawTable(root, categories);
   }
 }
 
@@ -60,7 +68,7 @@ async function refreshProductsData(root, categoriesArg) {
     try { categories = (await api.get('/api/admin/categories')).categories; } catch (e) { categories = []; }
   }
   try {
-    const { products } = await api.get(`/api/admin/products?sort=${productsState.sort}`);
+    const { products } = await api.get('/api/admin/products?sort=newest');
     allProductsCache = products;
     drawTable(root, categories);
   } catch (e) {
@@ -68,17 +76,49 @@ async function refreshProductsData(root, categoriesArg) {
   }
 }
 
-function drawTable(root, categories) {
+function sortIndicator(col) {
+  const options = PRODUCT_SORT_BY_HEADER[col];
+  const active = options.includes(productsState.sort);
+  if (!active) return '';
+  return productsState.sort === 'price_asc' ? ' ↑' : ' ✔';
+}
+
+function onProductHeaderClick(root, col) {
+  const options = PRODUCT_SORT_BY_HEADER[col];
+  const idx = options.indexOf(productsState.sort);
+  productsState.sort = options[(idx + 1) % options.length];
+  drawTable(root, null, true);
+}
+
+const PRODUCT_SORT_COMPARE = {
+  title: (a, b) => a.title.localeCompare(b.title, 'ru'),
+  category: (a, b) => (a.category_name || '').localeCompare(b.category_name || '', 'ru'),
+  price_asc: (a, b) => a.price - b.price,
+  price_desc: (a, b) => b.price - a.price,
+  stock: (a, b) => a.stock - b.stock,
+  newest: (a, b) => new Date(b.created_at) - new Date(a.created_at),
+};
+
+function drawTable(root, categoriesArg, keepCategories) {
   const wrap = document.getElementById('prod-table-wrap');
-  const catId = productsState.category;
-  const list = catId ? allProductsCache.filter(p => String(p.category_id) === String(catId)) : allProductsCache;
+  const categories = categoriesArg || [];
+  const catIds = productsState.categories;
+  let list = catIds.length ? allProductsCache.filter(p => catIds.includes(String(p.category_id))) : allProductsCache;
+  list = [...list].sort(PRODUCT_SORT_COMPARE[productsState.sort] || PRODUCT_SORT_COMPARE.newest);
   if (list.length === 0) {
     wrap.innerHTML = '<p class="empty-note">Товаров нет.</p>';
     return;
   }
   wrap.innerHTML = `
     <table class="admin-table">
-      <thead><tr><th></th><th>Название</th><th>Категория</th><th>Цена</th><th>Остаток</th><th>Популярный</th><th></th></tr></thead>
+      <thead><tr>
+        <th></th>
+        <th class="sortable-th" data-col="title">Название${sortIndicator('title')}</th>
+        <th class="sortable-th" data-col="category">Категория${sortIndicator('category')}</th>
+        <th class="sortable-th" data-col="price">Цена${sortIndicator('price')}</th>
+        <th class="sortable-th" data-col="stock">Остаток${sortIndicator('stock')}</th>
+        <th>Популярный</th><th></th>
+      </tr></thead>
       <tbody>
         ${list.map(p => `
           <tr data-id="${p.id}">
@@ -97,6 +137,10 @@ function drawTable(root, categories) {
       </tbody>
     </table>
   `;
+  wrap.querySelectorAll('.sortable-th').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => onProductHeaderClick(root, th.dataset.col));
+  });
   wrap.querySelectorAll('[data-edit]').forEach(btn => {
     btn.addEventListener('click', () => {
       const p = allProductsCache.find(x => x.id == btn.dataset.edit);
@@ -115,8 +159,17 @@ function drawTable(root, categories) {
   });
 }
 
+const PRODUCT_ICON_SHAPES = [
+  'hoodie', 'scarf', 'sneaker', 'windbreaker', 'cap', 'headphones',
+  'speaker', 'smartwatch', 'powerbank', 'keyboard', 'honey-jar', 'spice-jar',
+  'coffee-bag', 'cookie', 'tea-box', 'blanket', 'vase', 'candle',
+  'bedding', 'lamp', 'book', 'notebook', 'atlas', 'postcard',
+  'cream-jar', 'comb', 'soap-bar', 'lip-balm', 'box',
+];
+
 function openProductModal(root, product, categories) {
   const isEdit = !!product;
+  const canEditIcon = isEdit && (Admin.isOwner || product.created_by === Admin.user.id);
   const modal = openModal(`
     <h3>${isEdit ? 'Изменить товар' : 'Новый товар'}</h3>
     <div class="alert alert-error" id="prod-modal-error"></div>
@@ -134,12 +187,31 @@ function openProductModal(root, product, categories) {
       <div class="field"><label>Описание</label><textarea name="description" rows="3">${product ? escapeHtml(product.description) : ''}</textarea></div>
       <div class="field">
         <label><input type="checkbox" name="is_popular" ${product?.is_popular ? 'checked' : ''} style="width:auto; margin-right:6px;">Показывать в «Популярном» на главной</label>
+        <label style="margin-top:6px; display:block;"><input type="checkbox" name="always_low_stock" ${product?.always_low_stock ? 'checked' : ''} style="width:auto; margin-right:6px;">Всегда показывать «Осталось мало» на карточке (даже если товара много)</label>
       </div>
+      ${!isEdit ? `
+      <div class="field">
+        <label>Иконка</label>
+        <select name="icon_shape">${PRODUCT_ICON_SHAPES.map(s => `<option value="${s}">${s}</option>`).join('')}</select>
+      </div>` : ''}
       <div class="modal-actions">
         <button type="button" class="btn btn-outline" id="prod-cancel">Отмена</button>
         <button type="submit" class="btn btn-primary">${isEdit ? 'Сохранить' : 'Создать'}</button>
       </div>
     </form>
+    ${isEdit && canEditIcon ? `
+    <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--line);">
+      <h4>Иконка товара</h4>
+      <div class="field">
+        <label>Выбрать из готовых</label>
+        <select id="icon-shape-select">${PRODUCT_ICON_SHAPES.map(s => `<option value="${s}" ${product.icon_shape === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        <button type="button" class="btn btn-outline btn-sm" id="apply-icon-shape-btn" style="margin-top:8px;">Применить</button>
+      </div>
+      <div class="field">
+        <label>Или загрузить свою (SVG, до 200KB)</label>
+        <input type="file" id="custom-icon-input" accept=".svg,image/svg+xml">
+      </div>
+    </div>` : ''}
   `);
   modal.querySelector('#prod-cancel').addEventListener('click', closeModal);
   modal.querySelector('#prod-form').addEventListener('submit', async (e) => {
@@ -155,7 +227,9 @@ function openProductModal(root, product, categories) {
       stock: Number(form.stock.value),
       description: form.description.value,
       is_popular: form.is_popular.checked,
+      always_low_stock: form.always_low_stock.checked,
     };
+    if (!isEdit) payload.icon_shape = form.icon_shape.value;
     try {
       if (isEdit) {
         await api.put(`/api/admin/products/${product.id}`, payload);
@@ -168,6 +242,32 @@ function openProductModal(root, product, categories) {
     } catch (err) {
       errEl.textContent = err.message;
       errEl.classList.add('show');
+    }
+  });
+
+  modal.querySelector('#apply-icon-shape-btn')?.addEventListener('click', async () => {
+    try {
+      await api.put(`/api/admin/products/${product.id}/icon`, { icon_shape: document.getElementById('icon-shape-select').value });
+      toast('Иконка изменена');
+      closeModal();
+      renderProducts(root);
+    } catch (e) { toast(e.message); }
+  });
+
+  modal.querySelector('#custom-icon-input')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 200 * 1024) { toast('Файл больше 200KB'); e.target.value = ''; return; }
+    try {
+      const svgText = await file.text();
+      await api.put(`/api/admin/products/${product.id}/icon`, { custom_icon_svg: svgText });
+      toast('Своя иконка загружена');
+      closeModal();
+      renderProducts(root);
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      e.target.value = '';
     }
   });
 }

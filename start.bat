@@ -120,15 +120,25 @@ if not exist "server\data.sqlite" (
 
 echo [8] launching server window >> "%LOG%"
 echo Starting the server...
-start "Soroka store server - keep this window open" cmd /k "call npm start"
+if exist "server\.port" del /q "server\.port" >nul 2>nul
+start "Soroka store server - keep this window open" cmd /k "restart-loop.bat"
 
-timeout /t 3 /nobreak >nul
-start "" http://localhost:3000
+set "APP_PORT=3000"
+for /l %%i in (1,1,20) do (
+  if exist "server\.port" goto :port_ready
+  timeout /t 1 /nobreak >nul
+)
+:port_ready
+if exist "server\.port" (
+  set /p APP_PORT=<"server\.port"
+)
+
+start "" http://localhost:!APP_PORT!
 echo [8] server window launched, browser opened >> "%LOG%"
 
 echo.
-echo Done! The store opened in your browser: http://localhost:3000
-echo Admin panel: http://localhost:3000/admin
+echo Done! The store opened in your browser: http://localhost:!APP_PORT!
+echo Admin panel: http://localhost:!APP_PORT!/admin
 echo.
 echo To stop the store, close the separate server log window.
 echo This window will close itself in a few seconds.

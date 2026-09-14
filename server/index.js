@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
 const cookieParser = require('cookie-parser');
 
@@ -18,11 +19,20 @@ try {
   console.error('Не удалось выполнить автосидирование базы:', e.message);
 }
 
+try {
+  const { purgeExpiredDeletedUsers } = require('./cleanup');
+  const purged = purgeExpiredDeletedUsers();
+  if (purged) console.log(`Очищено просроченных удалённых аккаунтов: ${purged}`);
+} catch (e) {
+  console.error('Не удалось выполнить очистку удалённых аккаунтов:', e.message);
+}
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const DEFAULT_PORT = parseInt(process.env.PORT, 10) || 3000;
+const AUTO_PICK_PORT = !process.env.PORT;
 app.set('trust proxy', 1); // корректный req.ip за прокси хостинга (например, Render)
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(attachUser);
 
@@ -41,19 +51,32 @@ function isSuspicious(ip) {
   rateBuckets.set(ip, arr);
   return arr.length > RATE_THRESHOLD;
 }
-app.use((req, res, next) => {
+const { isVpnOrProxy } = require('./vpn-check');
+app.use(async (req, res, next) => {
   if (req.method !== 'GET') return next();
   const skip = req.path.startsWith('/api') || req.path.startsWith('/css') ||
     req.path.startsWith('/js') || req.path.startsWith('/images') ||
     req.path.startsWith('/admin') || req.path === '/captcha.html' || req.path === '/favicon.ico';
   if (skip) return next();
+  if (req.cookies?.captcha_ok) return next();
   if (isSuspicious(req.ip)) {
+    return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}`);
+  }
+  let vpn = false;
+  try { vpn = await isVpnOrProxy(req.ip); } catch (e) {}
+  if (vpn) {
     return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}`);
   }
   next();
 });
 
 // ---- API ----
+app.get('/api/ping', (req, res) => res.json({ ok: true, t: Date.now() }));
+app.post('/api/captcha/verify', (req, res) => {
+  res.cookie('captcha_ok', '1', { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 });
+  res.json({ ok: true });
+});
+
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/products', require('./routes/products'));
@@ -92,19 +115,53 @@ app.use((err, req, res, next) => {
 
 function getLanAddress() {
   const nets = os.networkInterfaces();
+  const candidates = [];
   for (const name of Object.keys(nets)) {
     for (const net of nets[name] || []) {
-      if (net.family === 'IPv4' && !net.internal) return net.address;
+      if (net.family === 'IPv4' && !net.internal && !net.address.startsWith('169.254.')) {
+        candidates.push(net.address);
+      }
     }
   }
-  return null;
+  return candidates[0] || null;
 }
 
-app.listen(PORT, () => {
-  console.log(`Сорока-шоп запущен: http://localhost:${PORT}`);
-  console.log(`Админ-панель:       http://localhost:${PORT}/admin`);
-  const lan = getLanAddress();
-  if (lan) {
-    console.log(`Для других устройств в этой же сети (телефон и т.п.): http://${lan}:${PORT}`);
-  }
-});
+function startServer(port, attemptsLeft) {
+  const server = app.listen(port, () => {
+    console.log(`Сорока-шоп запущен: http://localhost:${port}`);
+    console.log(`Админ-панель:       http://localhost:${port}/admin`);
+    try { fs.writeFileSync(path.join(__dirname, '.port'), String(port)); } catch (e) {}
+    const lan = getLanAddress();
+    if (lan) {
+      console.log(`Для других устройств в этой же сети (телефон и т.п.): http://${lan}:${port}`);
+    }
+  });
+
+  server.on('error', (err) => {
+    if (err.code !== 'EADDRINUSE') throw err;
+    if (AUTO_PICK_PORT && attemptsLeft > 0) {
+      console.log(`Порт ${port} занят, пробую ${port + 1}...`);
+      startServer(port + 1, attemptsLeft - 1);
+      return;
+    }
+    if (!AUTO_PICK_PORT) {
+      console.error(`Порт ${port} занят (задан через переменную окружения PORT хостингом).`);
+      process.exit(1);
+      return;
+    }
+    console.error(`Не нашла свободный порт рядом с ${DEFAULT_PORT}.`);
+    const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+    rl.question('Введите номер порта для запуска вручную: ', (answer) => {
+      rl.close();
+      const manualPort = parseInt(answer, 10);
+      if (!manualPort || manualPort < 1 || manualPort > 65535) {
+        console.error('Некорректный номер порта.');
+        process.exit(1);
+        return;
+      }
+      startServer(manualPort, 5);
+    });
+  });
+}
+
+startServer(DEFAULT_PORT, 10);

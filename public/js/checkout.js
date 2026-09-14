@@ -59,18 +59,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           </label>
           <div class="field" id="address-field" style="margin-top:14px; display:none;">
             <label for="address">Адрес доставки</label>
-            <input type="text" id="address" name="address" placeholder="Город, улица, дом, квартира">
-            <div class="hint">Укажите город, улицу и номер дома — короткие адреса без этих данных не принимаются.</div>
+            <input type="text" id="address" name="address" placeholder="Город, улица, дом, квартира" value="${Site.user.saved_address ? escapeHtml(Site.user.saved_address) : ''}">
+            <div class="hint">${Site.user.saved_address ? 'Подставили адрес из прошлого заказа — можно изменить. ' : ''}Укажите город, улицу и номер дома — короткие адреса без этих данных не принимаются.</div>
           </div>
-        </div>
-
-        <div class="panel" style="margin-bottom:20px;">
-          <h3>Купон</h3>
-          <div class="coupon-row">
-            <input type="text" id="coupon-input" placeholder="Есть промокод?" style="text-transform:uppercase;">
-            <button type="button" class="btn btn-outline btn-sm" id="apply-coupon-btn">Применить</button>
-          </div>
-          <div class="coupon-note" id="coupon-note"></div>
         </div>
 
         <div class="panel">
@@ -86,7 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                   <input type="text" id="card-cvc" placeholder="CVC" maxlength="3" style="max-width:70px;">
                 </div>
                 <div class="card-preview" id="card-preview">•••• •••• •••• ••••</div>
-                <div class="hint">Демо-форма: реальное списание не производится, сохраняется только маскированный номер.</div>
+                <div class="hint">Демо-форма: реальное списание не производится. Номер хранится в зашифрованном виде и доступен только владельцу магазина — например, для оформления возврата.</div>
               </div>
             </div>
           </label>
@@ -108,6 +99,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             <input type="radio" name="payment_method" value="cash_on_delivery">
             <div><div class="title">Наличными при получении</div><div class="desc">Только для курьерской доставки</div></div>
           </label>
+        </div>
+
+        <div class="panel" style="margin-top:20px;">
+          <h3>Купон</h3>
+          <div class="coupon-row">
+            <input type="text" id="coupon-input" placeholder="Есть промокод?" style="text-transform:uppercase;">
+            <button type="button" class="btn btn-outline btn-sm" id="apply-coupon-btn">Применить</button>
+          </div>
+          <div class="coupon-note" id="coupon-note"></div>
         </div>
 
         <div class="alert alert-error" id="checkout-error"></div>
@@ -152,6 +152,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         discountLine.classList.add('hidden');
       }
       document.getElementById('grand-total').textContent = fmtPrice(q.total);
+      const noteEl = document.getElementById('coupon-note');
+      if (appliedCoupon && q.couponError) {
+        noteEl.textContent = q.couponError;
+        noteEl.className = 'coupon-note err';
+        appliedCoupon = null;
+      }
     } catch (e) { /* тихо игнорируем — не критично для оформления */ }
   }
   updateQuote();
@@ -174,7 +180,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Форматирование номера карты + маскированный превью (полный номер никуда не отправляется)
   const cardInput = document.getElementById('card-number');
   const cardPreview = document.getElementById('card-preview');
   cardInput.addEventListener('input', () => {
@@ -219,15 +224,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const paymentMethod = form.payment_method.value;
-    let cardMasked = null;
+    let cardDigits = null;
     if (paymentMethod === 'card_online') {
-      const digits = cardInput.value.replace(/\D/g, '');
-      if (digits.length < 12) {
+      cardDigits = cardInput.value.replace(/\D/g, '');
+      if (cardDigits.length < 12) {
         errEl.textContent = 'Введите номер карты полностью';
         errEl.classList.add('show');
         return;
       }
-      cardMasked = `•••• •••• •••• ${digits.slice(-4)}`;
     }
 
     const btn = document.getElementById('confirm-btn');
@@ -238,7 +242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         address: method === 'pickup' ? '' : form.address.value,
         pickup_point: method === 'pickup' ? pickupSelect.value : null,
         payment_method: paymentMethod,
-        card_masked: cardMasked,
+        card_number: cardDigits,
         coupon_code: appliedCoupon,
       });
       Site.refreshCartBadge();

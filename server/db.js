@@ -147,6 +147,15 @@ const migrations = [
   "ALTER TABLE orders ADD COLUMN coupon_code TEXT",
   "ALTER TABLE orders ADD COLUMN discount_amount REAL NOT NULL DEFAULT 0",
   "ALTER TABLE orders ADD COLUMN subtotal REAL NOT NULL DEFAULT 0",
+  "ALTER TABLE orders ADD COLUMN card_encrypted TEXT",
+  "ALTER TABLE users ADD COLUMN deleted_at TEXT",
+  "ALTER TABLE products ADD COLUMN always_low_stock INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE coupons ADD COLUMN category_ids TEXT",
+  "ALTER TABLE coupons ADD COLUMN usage_limit INTEGER",
+  "ALTER TABLE coupons ADD COLUMN per_user_once INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN saved_address TEXT",
+  "ALTER TABLE products ADD COLUMN created_by INTEGER",
+  "ALTER TABLE products ADD COLUMN custom_icon TEXT",
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (e) { /* column already exists */ }

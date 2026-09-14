@@ -63,6 +63,29 @@ router.get('/', (req, res) => {
   });
 });
 
+router.get('/suggest', (req, res) => {
+  const q = String(req.query.q || '').trim().toLowerCase();
+  if (q.length < 2) return res.json({ suggestions: [] });
+  const rows = db.prepare('SELECT title FROM products').all();
+  const matches = [];
+  for (const r of rows) {
+    if (r.title.toLowerCase().includes(q)) {
+      matches.push(r.title);
+      if (matches.length >= 6) break;
+    }
+  }
+  res.json({ suggestions: matches });
+});
+
+router.get('/batch', (req, res) => {
+  const ids = String(req.query.ids || '').split(',').map(n => parseInt(n, 10)).filter(Boolean).slice(0, 12);
+  if (!ids.length) return res.json({ products: [] });
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT * FROM products WHERE id IN (${placeholders})`).all(...ids);
+  const byId = Object.fromEntries(rows.map(r => [r.id, mapProduct(r)]));
+  res.json({ products: ids.map(id => byId[id]).filter(Boolean) });
+});
+
 router.get('/:id', (req, res) => {
   const p = db.prepare(`
     SELECT p.*, c.slug as category_slug, c.name as category_name
@@ -85,6 +108,29 @@ router.get('/:id', (req, res) => {
   const avg = reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) : null;
 
   res.json({ product: mapProduct(p), reviews, avg_rating: avg ? Math.round(avg * 10) / 10 : null });
+});
+
+router.get('/:id/related', (req, res) => {
+  const p = db.prepare('SELECT id, category_id FROM products WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Товар не найден' });
+
+  const similar = db.prepare(`
+    SELECT * FROM products WHERE category_id = ? AND id != ?
+    ORDER BY is_popular DESC, created_at DESC LIMIT 6
+  `).all(p.category_id, p.id).map(mapProduct);
+
+  const oftenBoughtWith = db.prepare(`
+    SELECT pr.*, COUNT(*) as together_count
+    FROM order_items oi1
+    JOIN order_items oi2 ON oi2.order_id = oi1.order_id AND oi2.product_id != oi1.product_id
+    JOIN products pr ON pr.id = oi2.product_id
+    WHERE oi1.product_id = ?
+    GROUP BY oi2.product_id
+    ORDER BY together_count DESC, pr.is_popular DESC
+    LIMIT 4
+  `).all(p.id).map(row => mapProduct(row));
+
+  res.json({ similar, oftenBoughtWith });
 });
 
 router.post('/:id/reviews', requireAuth, (req, res) => {

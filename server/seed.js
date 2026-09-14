@@ -127,6 +127,11 @@ function run() {
     insertSetting.run('store_phone', '+7 900 123-45-67');
     insertSetting.run('store_address', 'г. Тверь, ул. Гагарина, 14');
     insertSetting.run('store_description', 'Собираем в одном месте всё самое нужное и немного блестящего.');
+    insertSetting.run('social_intro', 'Мы в соцсетях:');
+    insertSetting.run('social_links', JSON.stringify([
+      { prefix: 'TG', url: 'https://t.me/soroka_shop_demo' },
+      { prefix: 'VK', url: 'https://vk.com/soroka_shop_demo' },
+    ]));
     insertSetting.run('delivery_courier_price', '250');
     insertSetting.run('delivery_post_price', '350');
     insertSetting.run('delivery_free_threshold', '3000');

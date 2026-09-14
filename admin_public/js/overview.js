@@ -12,7 +12,6 @@ Admin.register('overview', async (root) => {
           <div class="stat-card"><div class="num">${stats.lowStock}</div><div class="label">Товаров с низким остатком</div></div>
         </div>
         <p style="color:var(--muted); font-size:13px;">Остаток «низкий» — 5 штук и меньше. Обновляется автоматически, пока открыт этот раздел.</p>
-        ${stats.lanUrl ? `<p style="color:var(--muted); font-size:13px;">Адрес для других устройств в этой же сети: <a href="${stats.lanUrl}" style="color:var(--teal-dark); font-weight:700;">${stats.lanUrl}</a></p>` : ''}
       `;
     } catch (e) {
       if (!silent) root.innerHTML = `<p>Не удалось загрузить статистику.</p>`;

@@ -10,6 +10,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   wireProductGridEvents(grid);
 
+  const headerSearchInput = document.querySelector('#search-form input[name="search"]');
+  if (headerSearchInput) {
+    headerSearchInput.addEventListener('input', () => {
+      if (headerSearchInput.value === '' && getState().search) {
+        pushState({ ...getState(), search: '', page: 1 });
+      }
+    });
+  }
+
   function getState() {
     const p = new URLSearchParams(location.search);
     return {

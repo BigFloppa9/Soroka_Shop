@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { signToken, requireAuth, isFrozen } = require('../middleware/auth');
+const { purgeExpiredDeletedUsers, GRACE_PERIOD_MS } = require('../cleanup');
 
 const router = express.Router();
 
@@ -14,6 +15,7 @@ const COOKIE_OPTS = {
 const NAME_RE = /^[A-Za-zА-Яа-яЁё0-9]+( [A-Za-zА-Яа-яЁё0-9]+)*$/;
 
 router.post('/register', (req, res) => {
+  purgeExpiredDeletedUsers();
   const { name, email, password, consent } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'Укажите имя' });
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Некорректный email' });
@@ -33,6 +35,7 @@ router.post('/register', (req, res) => {
 });
 
 router.post('/login', (req, res) => {
+  purgeExpiredDeletedUsers();
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Введите email и пароль' });
 
@@ -42,8 +45,14 @@ router.post('/login', (req, res) => {
   }
   if (user.status === 'blocked') return res.status(403).json({ error: 'Аккаунт заблокирован' });
 
+  let revived = false;
+  if (user.deleted_at) {
+    db.prepare('UPDATE users SET deleted_at = NULL WHERE id = ?').run(user.id);
+    revived = true;
+  }
+
   res.cookie('token', signToken(user), COOKIE_OPTS);
-  res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+  res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, revived });
 });
 
 router.post('/logout', (req, res) => {
@@ -125,21 +134,50 @@ router.put('/notify-prefs', requireAuth, (req, res) => {
 
 // ---- Удаление собственного аккаунта ----
 router.delete('/account', requireAuth, (req, res) => {
-  const tx = db.transaction((userId) => {
-    const orderIds = db.prepare('SELECT id FROM orders WHERE user_id = ?').all(userId).map(o => o.id);
-    for (const oid of orderIds) {
-      db.prepare('DELETE FROM order_items WHERE order_id = ?').run(oid);
-    }
-    db.prepare('DELETE FROM orders WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM reviews WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM cart_items WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM favorites WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
-  });
-  tx(req.user.id);
+  db.prepare("UPDATE users SET deleted_at = datetime('now') WHERE id = ?").run(req.user.id);
   res.clearCookie('token');
+  res.json({ ok: true, graceDays: Math.round(GRACE_PERIOD_MS / (24 * 60 * 60 * 1000)) });
+});
+
+// ---- Смена пароля ----
+router.put('/password', requireAuth, (req, res) => {
+  const { current_password, new_password, confirm_password } = req.body || {};
+  if (!current_password || !new_password || !confirm_password) {
+    return res.status(400).json({ error: 'Заполните все поля' });
+  }
+  if (new_password !== confirm_password) {
+    return res.status(400).json({ error: 'Новый пароль и подтверждение не совпадают' });
+  }
+  if (new_password.length < 6) {
+    return res.status(400).json({ error: 'Пароль должен быть не короче 6 символов' });
+  }
+  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+  if (!bcrypt.compareSync(current_password, row.password_hash)) {
+    return res.status(400).json({ error: 'Текущий пароль указан неверно' });
+  }
+  const hash = bcrypt.hashSync(new_password, 10);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
   res.json({ ok: true });
+});
+
+// ---- Забыли пароль ----
+// Демо-режим (как и смена почты выше): письмо никуда не отправляется.
+// Настоящий (уже введённый) пароль восстановить нельзя в принципе — он
+// хранится только в виде bcrypt-хэша, а не в открытом виде. Поэтому здесь
+// генерируется и сразу выдаётся НОВЫЙ пароль, а не старый.
+router.post('/forgot-password', (req, res) => {
+  const { email } = req.body || {};
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+    return res.status(400).json({ error: 'Некорректный email' });
+  }
+  const user = db.prepare('SELECT id FROM users WHERE email = ? AND deleted_at IS NULL').get(String(email).toLowerCase());
+  if (!user) {
+    return res.status(404).json({ error: 'Аккаунт с таким email не найден' });
+  }
+  const newPassword = Math.random().toString(36).slice(-4) + Math.random().toString(36).slice(-4);
+  const hash = bcrypt.hashSync(newPassword, 10);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
+  res.json({ ok: true, newPassword, hint: 'Демо-режим: в реальном магазине этот пароль ушёл бы на почту, а не показывался бы здесь.' });
 });
 
 module.exports = router;

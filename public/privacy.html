@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
 <title>Политика конфиденциальности — Сорока</title>
 <link rel="stylesheet" href="/css/style.css">
-<script>try{if(localStorage.getItem('soroka-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+<script>try{var t=localStorage.getItem('soroka-theme');if(t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')}catch(e){}</script>
 </head>
 <body>
 <header class="site-header"><div id="site-header"></div></header>
@@ -22,7 +23,7 @@
   <p>Владелец магазина (роль «Овнер») вправе просматривать все введённые пользователем данные, включая контактную информацию и данные заказов, для работы с обращениями, разрешения споров и соблюдения юридических требований. Администраторы видят данные заказов в объёме, необходимом для их обработки.</p>
 
   <h3>Платёжные данные</h3>
-  <p>Полный номер банковской карты нигде не сохраняется и не передаётся — в системе остаётся только маскированное представление (например, «**** 4242») исключительно для внутренней сверки заказа.</p>
+  <p>Номер банковской карты хранится в зашифрованном виде. В обычном режиме сотрудники магазина видят только маскированное представление (например, «•••• 4242»). Полный номер может увидеть исключительно владелец магазина — например, для оформления возврата по заказу.</p>
 
   <h3>Хранение и удаление</h3>
   <p>Данные хранятся, пока существует аккаунт. Вы можете удалить аккаунт самостоятельно в любой момент в разделе «Профиль» — это необратимо удалит историю заказов, отзывы, избранное и корзину.</p>
@@ -30,11 +31,23 @@
   <h3>Заморозка аккаунта</h3>
   <p>В отдельных случаях (например, при подозрении на нарушение правил магазина) владелец может временно ограничить оформление заказов на аккаунте. Просмотр каталога и работа с корзиной при этом остаются доступны.</p>
 
-  <p style="margin-top:32px;"><a href="/register.html" class="btn btn-outline btn-sm">← Назад к регистрации</a></p>
+  <p style="margin-top:32px;"><a href="/register.html" id="privacy-back-link" class="btn btn-outline btn-sm">← Назад к регистрации</a></p>
 </main>
 
 <footer class="site-footer"><div id="site-footer"></div></footer>
+<script>
+  (() => {
+    const link = document.getElementById('privacy-back-link');
+    let cameFromRegister = false;
+    try { cameFromRegister = new URL(document.referrer).pathname.includes('/register.html'); } catch (e) {}
+    if (!cameFromRegister) {
+      link.href = '/';
+      link.textContent = '← На главную';
+    }
+  })();
+</script>
 <script src="/js/api.js"></script>
+<script src="/js/idle-ping.js"></script>
 <script src="/js/main.js"></script>
 </body>
 </html>

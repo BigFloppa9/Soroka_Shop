@@ -21,6 +21,21 @@ function toast(msg) {
   el._t = setTimeout(() => { el.style.opacity = 0; }, 2400);
 }
 
+function activityToast(msg) {
+  let stack = document.querySelector('.activity-toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.className = 'activity-toast-stack';
+    document.body.appendChild(stack);
+  }
+  const item = document.createElement('div');
+  item.className = 'activity-toast';
+  item.innerHTML = `<span>${escapeHtml(msg)}</span><button aria-label="Закрыть">✕</button>`;
+  stack.appendChild(item);
+  item.querySelector('button').addEventListener('click', () => item.remove());
+  setTimeout(() => item.remove(), 12000);
+}
+
 function openModal(html) {
   closeModal();
   const backdrop = document.createElement('div');
@@ -61,7 +76,7 @@ const Admin = {
     }
 
     document.getElementById('admin-shell').style.display = '';
-    document.getElementById('who').textContent = `${this.user.name} · ${this.user.email}${this.isOwner ? ' · владелец' : ' · администратор'}`;
+    document.getElementById('who').textContent = `${this.user.name} · ${this.user.email}`;
     document.getElementById('exit-admin').addEventListener('click', () => { location.href = '/'; });
 
     // Разделы, доступные только владельцу, скрываем из меню для обычного админа.
@@ -80,6 +95,19 @@ const Admin = {
 
     const initial = (location.hash || '#overview').slice(1);
     this.go(this.routes[initial] ? initial : 'overview', true);
+    this.startActivityPolling();
+  },
+
+  startActivityPolling() {
+    let since = new Date().toISOString();
+    setInterval(async () => {
+      try {
+        const { orders, users, now } = await api.get('/api/admin/activity?since=' + encodeURIComponent(since));
+        since = now;
+        orders.forEach(o => activityToast(`Новый заказ (№${o.id})`));
+        users.forEach(u => activityToast(`Новый пользователь — ${u.name}`));
+      } catch (e) { /* тихо игнорируем — необязательное уведомление */ }
+    }, 8000);
   },
 
   go(route, fromHash) {

@@ -9,8 +9,8 @@ function attachUser(req, res, next) {
   if (token) {
     try {
       const payload = jwt.verify(token, SECRET);
-      const user = db.prepare('SELECT id, name, email, role, status, frozen_until, freeze_reason, notify_order_status, notify_promotions FROM users WHERE id = ?').get(payload.id);
-      if (user && user.status !== 'blocked') req.user = user;
+      const user = db.prepare('SELECT id, name, email, role, status, frozen_until, freeze_reason, notify_order_status, notify_promotions, deleted_at, saved_address FROM users WHERE id = ?').get(payload.id);
+      if (user && user.status !== 'blocked' && !user.deleted_at) req.user = user;
     } catch (e) {
       // невалидный или просроченный токен — просто считаем гостем
     }

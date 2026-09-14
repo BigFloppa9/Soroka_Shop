@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
 <title>Сорока — интернет-магазин</title>
 <link rel="stylesheet" href="/css/style.css">
-<script>try{if(localStorage.getItem('soroka-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+<script>try{var t=localStorage.getItem('soroka-theme');if(t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')}catch(e){}</script>
 </head>
 <body>
 <header class="site-header"><div id="site-header"></div></header>
@@ -13,9 +14,9 @@
 <main>
   <section class="container-wide hero">
     <div>
-      <div class="hero-eyebrow">Новый заход, старые повадки</div>
-      <h1>Всего понемногу — и всё стоящее</h1>
-      <p class="lead">Одежда, электроника, книги, продукты и мелочи для дома — собрали в одном месте то, что обычно ищешь по пять вкладок сразу.</p>
+      <div class="hero-eyebrow" id="hero-eyebrow">Новый заход, старые повадки</div>
+      <h1 id="hero-title">Всего понемногу — и всё стоящее</h1>
+      <p class="lead" id="hero-subtitle">Одежда, электроника, книги, продукты и мелочи для дома — собрали в одном месте то, что обычно ищешь по пять вкладок сразу.</p>
       <div class="hero-actions">
         <a href="/catalog.html" class="btn btn-gold">Смотреть каталог</a>
         <a href="/catalog.html?sort=popular" class="btn btn-outline">Популярное</a>
@@ -58,6 +59,7 @@
 <footer class="site-footer"><div id="site-footer"></div></footer>
 
 <script src="/js/api.js"></script>
+<script src="/js/idle-ping.js"></script>
 <script src="/js/main.js"></script>
 <script src="/js/home.js"></script>
 </body>

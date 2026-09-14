@@ -44,11 +44,13 @@ Admin.register('users', async (root) => {
                 <td style="color:var(--muted); font-size:12px;">${new Date(u.created_at).toLocaleDateString('ru-RU')}</td>
                 <td style="text-align:right; white-space:nowrap;">
                   <button class="btn btn-outline btn-sm" data-notify="${u.id}">Написать</button>
+                  ${Admin.isOwner ? `
+                    <button class="btn btn-outline btn-sm" data-freeze="${u.id}" data-frozen="${frozen ? '1' : '0'}">${frozen ? 'Разморозить' : 'Заморозить'}</button>
+                  ` : ''}
                   <button class="btn btn-outline btn-sm" data-toggle-status="${u.id}" data-current="${u.status}">
                     ${u.status === 'active' ? 'Заблокировать' : 'Разблокировать'}
                   </button>
                   ${Admin.isOwner ? `
-                    <button class="btn btn-outline btn-sm" data-freeze="${u.id}" data-frozen="${frozen ? '1' : '0'}">${frozen ? 'Разморозить' : 'Заморозить'}</button>
                     <button class="btn btn-danger btn-sm" data-delete-user="${u.id}">Удалить</button>
                   ` : ''}
                 </td>

@@ -16,6 +16,28 @@ h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 500; margin: 
 a { color: inherit; }
 
 .admin-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.activity-toast-stack {
+  position: fixed; bottom: 16px; left: 16px; z-index: 300;
+  display: flex; flex-direction: column; gap: 8px; max-width: 340px;
+}
+.activity-toast {
+  background: var(--ink); color: var(--paper-soft); padding: 10px 14px;
+  border-radius: var(--radius-m); font-size: 13px; font-weight: 600;
+  box-shadow: 0 6px 18px rgba(0,0,0,.2); display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  animation: activity-in .2s ease-out;
+}
+.activity-toast button { background: none; border: none; color: var(--paper-soft); cursor: pointer; opacity: .7; flex-shrink: 0; }
+@keyframes activity-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.checkbox-popover {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 180px;
+  background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--radius-m);
+  box-shadow: 0 8px 24px rgba(0,0,0,.15); padding: 10px 12px;
+}
+.checkbox-popover .check-row { display: block; margin-bottom: 4px; font-size: 13px; }
+.check-row { display: block; margin-bottom: 6px; font-size: 13.5px; }
+.check-row input { width: auto; margin-right: 6px; }
+.sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.sortable-th:hover { color: var(--teal-dark); }
 .admin-sidebar {
   background: #1E2A28; color: #EFEDE3; padding: 22px 16px;
   display: flex; flex-direction: column; gap: 4px;

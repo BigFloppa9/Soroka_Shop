@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
+<link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
 <title>Soroka Shop — вход</title>
 <style>
   html, body {
@@ -259,6 +260,7 @@
       gateLabel.textContent = 'Готово, переходим в магазин...';
       statusText.textContent = 'Всё готово';
       const next = new URLSearchParams(location.search).get('next') || '/';
+      fetch('/api/captcha/verify', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
       setTimeout(() => { window.location.href = next; }, 900);
     }, 1200);
   }

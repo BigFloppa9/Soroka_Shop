@@ -229,6 +229,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       </div>
 
       <div class="panel" style="max-width:480px; margin-bottom:16px;">
+        <h3>Пароль</h3>
+        <div class="field"><label>Текущий пароль</label><input id="pw-current" type="password" autocomplete="current-password"></div>
+        <div class="field"><label>Новый пароль</label><input id="pw-new" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>Повторите новый пароль</label><input id="pw-confirm" type="password" autocomplete="new-password"></div>
+        <div class="alert alert-error" id="password-error"></div>
+        <button class="btn btn-primary btn-sm" id="save-password-btn">Изменить пароль</button>
+      </div>
+
+      <div class="panel" style="max-width:480px; margin-bottom:16px;">
         <h3>Уведомления</h3>
         <label class="check-row"><input type="checkbox" id="notify-order" ${u.notify_order_status ? 'checked' : ''}> О статусе заказа</label>
         <label class="check-row"><input type="checkbox" id="notify-promo" ${u.notify_promotions ? 'checked' : ''}> Об акциях и предложениях</label>
@@ -243,8 +252,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       <details class="danger-zone" style="max-width:480px;">
         <summary>Удалить аккаунт ${ICONS.chevron}</summary>
         <div class="body">
-          <p>Это действие необратимо: будут удалены ваш профиль, история заказов, отзывы, избранное и корзина.</p>
-          <button class="btn btn-danger" id="delete-account-btn">Удалить аккаунт навсегда</button>
+          <p>Аккаунт будет скрыт, но данные хранятся ещё 30 дней — если за это время войти снова тем же логином, аккаунт автоматически восстановится. По истечении 30 дней данные удаляются безвозвратно.</p>
+          <button class="btn btn-danger" id="delete-account-btn">Удалить аккаунт</button>
         </div>
       </details>
     `;
@@ -276,6 +285,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         toast('Настройки уведомлений сохранены');
       } catch (e) { toast(e.message); }
+    });
+
+    document.getElementById('save-password-btn').addEventListener('click', async () => {
+      const errEl = document.getElementById('password-error');
+      errEl.classList.remove('show');
+      try {
+        await api.put('/api/auth/password', {
+          current_password: document.getElementById('pw-current').value,
+          new_password: document.getElementById('pw-new').value,
+          confirm_password: document.getElementById('pw-confirm').value,
+        });
+        document.getElementById('pw-current').value = '';
+        document.getElementById('pw-new').value = '';
+        document.getElementById('pw-confirm').value = '';
+        toast('Пароль изменён');
+      } catch (e) {
+        errEl.textContent = e.message;
+        errEl.classList.add('show');
+      }
     });
 
     document.getElementById('start-email-change').addEventListener('click', () => {
@@ -319,8 +347,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     document.getElementById('delete-account-btn').addEventListener('click', async () => {
-      if (!confirm('Вы точно хотите удалить аккаунт? Это действие необратимо.')) return;
-      if (!confirm('Последнее предупреждение: все данные будут удалены безвозвратно. Продолжить?')) return;
+      if (!confirm('Удалить аккаунт? В течение 30 дней его можно будет восстановить, просто войдя снова.')) return;
       try {
         await api.del('/api/auth/account');
         location.href = '/';

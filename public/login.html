@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
 <title>Вход — Сорока</title>
 <link rel="stylesheet" href="/css/style.css">
-<script>try{if(localStorage.getItem('soroka-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
+<script>try{var t=localStorage.getItem('soroka-theme');if(t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')}catch(e){}</script>
 </head>
 <body>
 <header class="site-header"><div id="site-header"></div></header>
@@ -25,24 +26,59 @@
         <input type="password" id="password" name="password" required autocomplete="current-password">
       </div>
       <button type="submit" class="btn btn-primary btn-block">Войти</button>
+      <p style="margin-top:8px; font-size:12.5px;"><a href="#" id="forgot-password-link" style="color:var(--muted);">Забыли пароль?</a></p>
     </form>
+    <div id="forgot-password-area"></div>
     <p style="margin-top:16px; font-size:13.5px;">Ещё нет аккаунта? <a href="/register.html" style="color:var(--teal-dark); font-weight:700;">Зарегистрироваться</a></p>
-    <p class="footer-note" style="margin-top:20px;">Для проверки: client@example.com / client123</p>
   </div>
 </main>
 
 <footer class="site-footer"><div id="site-footer"></div></footer>
 
 <script src="/js/api.js"></script>
+<script src="/js/idle-ping.js"></script>
 <script src="/js/main.js"></script>
 <script>
+api.get('/api/auth/me').then(({ user }) => {
+  if (user) location.href = '/';
+}).catch(() => {});
+try {
+  const lastEmail = localStorage.getItem('soroka-last-email');
+  if (lastEmail) {
+    document.getElementById('email').value = lastEmail;
+    document.getElementById('password').focus();
+  }
+} catch (e) {}
+document.getElementById('forgot-password-link').addEventListener('click', (e) => {
+  e.preventDefault();
+  const area = document.getElementById('forgot-password-area');
+  area.innerHTML = `
+    <div class="field"><label>Email аккаунта</label><input id="forgot-email-input" type="email" value="${document.getElementById('email').value.replace(/"/g, '&quot;')}"></div>
+    <div class="alert alert-error" id="forgot-error"></div>
+    <button type="button" class="btn btn-outline btn-sm" id="forgot-submit-btn">Получить новый пароль</button>
+  `;
+  document.getElementById('forgot-submit-btn').addEventListener('click', async () => {
+    const errEl = document.getElementById('forgot-error');
+    errEl.classList.remove('show');
+    try {
+      const { newPassword, hint } = await api.post('/api/auth/forgot-password', { email: document.getElementById('forgot-email-input').value.trim() });
+      area.innerHTML = `<div class="alert alert-success show">Новый пароль: <strong>${newPassword}</strong></div><p class="hint">${hint}</p>`;
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.classList.add('show');
+    }
+  });
+});
 document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const errEl = document.getElementById('form-error');
   errEl.classList.remove('show');
   const form = e.target;
   try {
-    await api.post('/api/auth/login', { email: form.email.value, password: form.password.value });
+    await api.post('/api/auth/login', { email: form.email.value, password: form.password.value }).then(({ revived }) => {
+      if (revived) { try { sessionStorage.setItem('soroka-revived', '1'); } catch (e) {} }
+    });
+    try { localStorage.setItem('soroka-last-email', form.email.value.trim()); } catch (e) {}
     const next = new URLSearchParams(location.search).get('next');
     location.href = next || '/account.html';
   } catch (err) {

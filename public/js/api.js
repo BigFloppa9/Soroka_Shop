@@ -1,4 +1,14 @@
 const api = (() => {
+  function readCache(url) {
+    try {
+      const raw = sessionStorage.getItem('soroka-cache:' + url);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+  function writeCache(url, data) {
+    try { sessionStorage.setItem('soroka-cache:' + url, JSON.stringify(data)); } catch (e) {}
+  }
+
   async function request(method, url, body) {
     const opts = {
       method,
@@ -20,8 +30,24 @@ const api = (() => {
     }
     return data;
   }
+
+  function getCached(url, { onUpdate } = {}) {
+    const cached = readCache(url);
+    const fresh = request('GET', url).then(data => {
+      const changed = !cached || JSON.stringify(data) !== JSON.stringify(cached);
+      writeCache(url, data);
+      if (changed && onUpdate) onUpdate(data);
+      return data;
+    });
+    if (cached) {
+      fresh.catch(() => {});
+      return Promise.resolve(cached);
+    }
+    return fresh;
+  }
+
   return {
-    get: (url) => request('GET', url),
+    get: (url, opts) => (opts && opts.cache) ? getCached(url, opts) : request('GET', url),
     post: (url, body) => request('POST', url, body || {}),
     put: (url, body) => request('PUT', url, body || {}),
     del: (url) => request('DELETE', url),

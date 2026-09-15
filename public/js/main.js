@@ -345,7 +345,11 @@ const Site = {
     document.getElementById('search-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const val = e.target.search.value.trim();
-      location.href = '/catalog.html' + (val ? `?search=${encodeURIComponent(val)}` : '');
+      const params = new URLSearchParams(location.pathname === '/catalog.html' ? location.search : '');
+      params.delete('search');
+      params.delete('page');
+      if (val) params.set('search', val);
+      location.href = '/catalog.html' + (params.toString() ? `?${params.toString()}` : '');
     });
     this.wireSearchSuggest();
     this.loadNavCategories();
@@ -413,13 +417,19 @@ const Site = {
   async loadNavCategories() {
     const nav = document.getElementById('nav-row');
     if (!nav) return;
-    try {
-      const { categories } = await api.get('/api/categories');
+    const renderNav = (categories) => {
       const path = location.pathname;
       const params = new URLSearchParams(location.search);
       const activeCat = params.get('category');
       nav.innerHTML = `<a href="/catalog.html" class="${path.endsWith('catalog.html') && !activeCat ? 'active' : ''}">Весь каталог</a>` +
         categories.map(c => `<a href="/catalog.html?category=${c.slug}" class="${activeCat === c.slug ? 'active' : ''}">${escapeHtml(c.name)}</a>`).join('');
+    };
+    try {
+      const { categories } = await api.get('/api/categories', {
+        cache: true,
+        onUpdate: (data) => renderNav(data.categories),
+      });
+      renderNav(categories);
     } catch (e) {
       nav.innerHTML = '';
     }
@@ -468,7 +478,7 @@ const Site = {
         <span id="footer-name">Сорока</span> — учебный проект. <span class="admin-hint">·</span>
       </div>
     `;
-    api.get('/api/settings').then(({ settings }) => {
+    const applyFooterSettings = (settings) => {
       if (settings.store_description) document.getElementById('footer-desc').textContent = settings.store_description;
       if (settings.store_phone) document.getElementById('footer-phone').textContent = settings.store_phone;
       if (settings.store_address) document.getElementById('footer-address').textContent = settings.store_address;
@@ -484,7 +494,11 @@ const Site = {
       if (socialEl && links.length) {
         socialEl.innerHTML = links.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" aria-label="${escapeHtml(l.prefix)}" title="${escapeHtml(l.prefix)}">${escapeHtml(l.prefix)}</a>`).join('');
       }
-    }).catch(() => {});
+    };
+    api.get('/api/settings', {
+      cache: true,
+      onUpdate: (data) => applyFooterSettings(data.settings),
+    }).then(({ settings }) => applyFooterSettings(settings)).catch(() => {});
   },
 
   async renderAnnouncements() {

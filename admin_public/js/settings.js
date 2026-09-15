@@ -18,7 +18,6 @@ Admin.register('settings', async (root) => {
 
     wrap.innerHTML = `
       <form id="settings-form" style="max-width:460px;">
-        <div class="alert alert-success" id="settings-success">Настройки сохранены</div>
         <div class="field"><label>Телефон</label><input name="store_phone" value="${escapeHtml(settings.store_phone || '')}"></div>
         <div class="field"><label>Адрес</label><input name="store_address" value="${escapeHtml(settings.store_address || '')}"></div>
         <div class="field"><label>Описание для подвала сайта</label><textarea name="store_description" rows="3">${escapeHtml(settings.store_description || '')}</textarea></div>
@@ -33,17 +32,13 @@ Admin.register('settings', async (root) => {
         <div id="social-rows">${renderSocialRows()}</div>
         <button type="button" class="btn btn-outline btn-sm" id="add-social-row" style="margin-bottom:16px;">+ Добавить соцсеть</button>
 
-        <button type="submit" class="btn btn-primary btn-block">Сохранить</button>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button type="submit" class="btn btn-primary">Сохранить</button>
+          <span class="save-toast" id="settings-success">Настройки сохранены</span>
+        </div>
       </form>
       ${Admin.isOwner ? `
       <details class="danger-zone" style="max-width:460px; margin-top:24px;">
-        <summary>Опасная зона</summary>
-        <div class="body">
-          <p style="font-size:13px; color:var(--muted);">Полностью удаляет все заказы из базы данных. Товары, категории и пользователи не затрагиваются. Действие необратимо.</p>
-          <button class="btn btn-danger" id="clear-orders-btn">Очистить базу заказов</button>
-        </div>
-      </details>
-      <details class="danger-zone" style="max-width:460px; margin-top:16px;">
         <summary>Миграция между хостингами</summary>
         <div class="body">
           <p style="font-size:13px; color:var(--muted);">Скачивает файл базы данных целиком (пользователи, заказы, товары, номера карт и т.д. - включая ключ, которым карты зашифрованы) и позволяет так же целиком загрузить его на другой хостинг. Полезно при переезде между бесплатными хостингами. Импорт полностью ЗАМЕНЯЕТ текущую базу и перезапускает сервер.</p>
@@ -52,6 +47,13 @@ Admin.register('settings', async (root) => {
             Загрузить файл переноса
             <input type="file" id="import-db-input" accept=".sqlite" style="display:none;">
           </label>
+        </div>
+      </details>
+      <details class="danger-zone" style="max-width:460px; margin-top:16px;">
+        <summary>Опасная зона</summary>
+        <div class="body">
+          <p style="font-size:13px; color:var(--muted);">Полностью удаляет все заказы из базы данных. Товары, категории и пользователи не затрагиваются. Действие необратимо.</p>
+          <button class="btn btn-danger" id="clear-orders-btn">Очистить базу заказов</button>
         </div>
       </details>` : ''}
     `;
@@ -88,7 +90,15 @@ Admin.register('settings', async (root) => {
         e.target.value = '';
       }
     });
+    function syncSocialLinksFromDom() {
+      socialLinks = [...document.querySelectorAll('.social-row')].map(row => ({
+        prefix: row.querySelector('.social-prefix').value,
+        url: row.querySelector('.social-url').value,
+      }));
+    }
+
     document.getElementById('add-social-row').addEventListener('click', () => {
+      syncSocialLinksFromDom();
       socialLinks.push({ prefix: '', url: '' });
       document.getElementById('social-rows').innerHTML = renderSocialRows();
       wireSocialRows();
@@ -97,6 +107,7 @@ Admin.register('settings', async (root) => {
     function wireSocialRows() {
       document.querySelectorAll('.remove-social-row').forEach(btn => {
         btn.addEventListener('click', () => {
+          syncSocialLinksFromDom();
           const i = Number(btn.closest('.social-row').dataset.i);
           socialLinks.splice(i, 1);
           document.getElementById('social-rows').innerHTML = renderSocialRows();
@@ -127,7 +138,8 @@ Admin.register('settings', async (root) => {
           social_links: rows,
         });
         successEl.classList.add('show');
-        toast('Настройки сохранены');
+        clearTimeout(successEl._hideTimer);
+        successEl._hideTimer = setTimeout(() => successEl.classList.remove('show'), 3000);
       } catch (err) { toast(err.message); }
     });
   } catch (e) {

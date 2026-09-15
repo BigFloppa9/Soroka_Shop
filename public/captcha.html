@@ -273,7 +273,8 @@
     }
   });
 
-  setTimeout(runCheck, 9500);
+  const mode = new URLSearchParams(location.search).get('mode');
+  setTimeout(runCheck, mode === 'vpn' ? 9500 : 1000);
 
   const pageLoader = document.getElementById('pageLoader');
   if (pageLoader) {

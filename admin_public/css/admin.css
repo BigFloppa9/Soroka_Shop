@@ -38,6 +38,12 @@ a { color: inherit; }
 .check-row input { width: auto; margin-right: 6px; }
 .sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
 .sortable-th:hover { color: var(--teal-dark); }
+.hidden { display: none !important; }
+.save-toast {
+  color: var(--teal-dark); font-size: 13.5px; font-weight: 600;
+  opacity: 0; transition: opacity .3s ease;
+}
+.save-toast.show { opacity: 1; }
 .admin-sidebar {
   background: #1E2A28; color: #EFEDE3; padding: 22px 16px;
   display: flex; flex-direction: column; gap: 4px;

@@ -1,27 +1,75 @@
-let knownUserIds = new Set();
-let firstUsersLoad = true;
+let usersState = { roles: [], sort: 'newest' };
+const USER_SORT_BY_HEADER = { name: ['name'], created_at: ['newest', 'oldest'] };
+const USER_ROLE_LABELS = { customer: 'Покупатель', admin: 'Администратор', owner: 'Владелец' };
 
 Admin.register('users', async (root) => {
-  firstUsersLoad = true;
-  root.innerHTML = `<div id="users-wrap"><div class="empty-note">Загрузка…</div></div>`;
+  root.innerHTML = `
+    <div class="toolbar">
+      <div style="position:relative;">
+        <button type="button" class="btn btn-outline btn-sm" id="role-filter-btn">Роль${usersState.roles.length ? ` (${usersState.roles.length})` : ''}</button>
+        <div class="checkbox-popover hidden" id="role-filter-popover">
+          ${Object.entries(USER_ROLE_LABELS).map(([k, v]) => `
+            <label class="check-row"><input type="checkbox" class="role-cb" value="${k}" ${usersState.roles.includes(k) ? 'checked' : ''}> ${v}</label>
+          `).join('')}
+          <button type="button" class="btn btn-outline btn-sm" id="role-filter-clear" style="margin-top:6px;">Сбросить</button>
+        </div>
+      </div>
+      <div></div>
+    </div>
+    <div id="users-wrap"><div class="empty-note">Загрузка…</div></div>
+  `;
+
+  const filterBtn = document.getElementById('role-filter-btn');
+  const popover = document.getElementById('role-filter-popover');
+  filterBtn.addEventListener('click', (e) => { e.stopPropagation(); popover.classList.toggle('hidden'); });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#role-filter-btn, #role-filter-popover')) popover.classList.add('hidden'); });
+  popover.querySelectorAll('.role-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      usersState.roles = [...popover.querySelectorAll('.role-cb:checked')].map(x => x.value);
+      filterBtn.textContent = `Роль${usersState.roles.length ? ` (${usersState.roles.length})` : ''}`;
+      load();
+    });
+  });
+  document.getElementById('role-filter-clear').addEventListener('click', () => {
+    usersState.roles = [];
+    popover.querySelectorAll('.role-cb').forEach(cb => { cb.checked = false; });
+    filterBtn.textContent = 'Роль';
+    load();
+  });
+
   await load();
   Admin.startLive(() => { if (!document.getElementById('active-modal')) load(true); }, 8000);
 
+  function sortIndicator(col) {
+    const options = USER_SORT_BY_HEADER[col];
+    if (!options.includes(usersState.sort)) return '';
+    return usersState.sort === 'oldest' ? ' ↑' : ' ↓';
+  }
+
+  function onHeaderClick(col) {
+    const options = USER_SORT_BY_HEADER[col];
+    const idx = options.indexOf(usersState.sort);
+    usersState.sort = options[(idx + 1) % options.length];
+    load();
+  }
+
   async function load(silent) {
     const wrap = document.getElementById('users-wrap');
+    if (!silent) wrap.innerHTML = '<div class="empty-note">Загрузка…</div>';
     try {
-      const { users } = await api.get('/api/admin/users');
-
-      if (!firstUsersLoad) {
-        const newOnes = users.filter(u => !knownUserIds.has(u.id));
-        if (newOnes.length) toast(`Новый пользователь: ${newOnes[0].name}${newOnes.length > 1 ? ` и ещё ${newOnes.length - 1}` : ''}`);
-      }
-      knownUserIds = new Set(users.map(u => u.id));
-      firstUsersLoad = false;
+      const q = new URLSearchParams();
+      if (usersState.roles.length) q.set('role', usersState.roles.join(','));
+      if (usersState.sort) q.set('sort', usersState.sort);
+      const { users } = await api.get(`/api/admin/users?${q.toString()}`);
 
       wrap.innerHTML = `
         <table class="admin-table">
-          <thead><tr><th>Имя</th><th>Email</th><th>Роль</th><th>Статус</th><th>Регистрация</th><th></th></tr></thead>
+          <thead><tr>
+            <th class="sortable-th" data-col="name">Имя${sortIndicator('name')}</th>
+            <th>Email</th><th>Роль</th><th>Статус</th>
+            <th class="sortable-th" data-col="created_at">Регистрация${sortIndicator('created_at')}</th>
+            <th></th>
+          </tr></thead>
           <tbody>
             ${users.map(u => {
               const frozen = u.frozen_until && (u.frozen_until === 'forever' || new Date(u.frozen_until) > new Date());
@@ -35,7 +83,7 @@ Admin.register('users', async (root) => {
                     <option value="customer" ${u.role === 'customer' ? 'selected' : ''}>Покупатель</option>
                     <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Администратор</option>
                     <option value="owner" ${u.role === 'owner' ? 'selected' : ''}>Владелец</option>
-                  </select>` : `<span>${{ customer: 'Покупатель', admin: 'Администратор', owner: 'Владелец' }[u.role] || u.role}</span>`}
+                  </select>` : `<span>${USER_ROLE_LABELS[u.role] || u.role}</span>`}
                 </td>
                 <td>
                   <span class="pill ${u.status === 'active' ? 'pill-active' : 'pill-blocked'}">${u.status === 'active' ? 'активен' : 'заблокирован'}</span>
@@ -60,6 +108,10 @@ Admin.register('users', async (root) => {
           </tbody>
         </table>
       `;
+      wrap.querySelectorAll('.sortable-th').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', () => onHeaderClick(th.dataset.col));
+      });
       wrap.querySelectorAll('[data-role]').forEach(select => {
         select.addEventListener('change', async () => {
           try {

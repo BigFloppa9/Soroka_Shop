@@ -135,10 +135,29 @@ router.put('/products/:id/icon', (req, res) => {
     return res.status(403).json({ error: 'Менять иконку может только владелец или админ, создавший этот товар' });
   }
 
-  const { icon_shape, custom_icon_svg } = req.body || {};
+  const { icon_shape, custom_icon_svg, custom_icon_data_url } = req.body || {};
   const oldCustomIcon = p.custom_icon;
 
-  if (custom_icon_svg) {
+  const IMAGE_EXT_BY_MIME = { 'image/svg+xml': 'svg', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+
+  if (custom_icon_data_url) {
+    const match = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(String(custom_icon_data_url).trim());
+    const ext = match && IMAGE_EXT_BY_MIME[match[1].toLowerCase()];
+    if (!match || !ext) {
+      return res.status(400).json({ error: 'Поддерживаются форматы: SVG, PNG, JPG, WebP' });
+    }
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.length > 500 * 1024) {
+      return res.status(400).json({ error: 'Файл больше 500KB' });
+    }
+    const dir = path.join(__dirname, '..', '..', 'public', 'images', 'custom-icons');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const fname = `icon-${p.id}-${Date.now()}.${ext}`;
+    fs.writeFileSync(path.join(dir, fname), buffer);
+    const webPath = `/images/custom-icons/${fname}`;
+    db.prepare('UPDATE products SET custom_icon = ?, images = ? WHERE id = ?')
+      .run(webPath, JSON.stringify([webPath]), p.id);
+  } else if (custom_icon_svg) {
     const svg = String(custom_icon_svg).trim();
     if (!svg.startsWith('<svg') || svg.length > 200000) {
       return res.status(400).json({ error: 'Ожидается SVG-файл размером до 200KB' });
@@ -156,7 +175,7 @@ router.put('/products/:id/icon', (req, res) => {
     db.prepare('UPDATE products SET icon_shape = ?, custom_icon = NULL, images = ? WHERE id = ?')
       .run(icon_shape, JSON.stringify(images), p.id);
   } else {
-    return res.status(400).json({ error: 'Укажите icon_shape или custom_icon_svg' });
+    return res.status(400).json({ error: 'Укажите icon_shape или файл иконки' });
   }
 
   if (oldCustomIcon) cleanupUnusedCustomIcon(oldCustomIcon);
@@ -243,8 +262,23 @@ router.put('/reviews/:id/reply', (req, res) => {
 });
 
 // ---- Пользователи ----
+const USER_SORTS = { newest: 'created_at DESC', oldest: 'created_at ASC', name: 'name COLLATE NOCASE ASC' };
 router.get('/users', (req, res) => {
-  res.json({ users: db.prepare("SELECT id, name, email, role, status, frozen_until, freeze_reason, created_at FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC").all() });
+  const { role } = req.query;
+  const sortKey = USER_SORTS[req.query.sort] ? req.query.sort : 'newest';
+  const roleList = role ? role.split(',').filter(Boolean) : [];
+  const where = ['deleted_at IS NULL'];
+  const params = [];
+  if (roleList.length) {
+    where.push(`role IN (${roleList.map(() => '?').join(',')})`);
+    params.push(...roleList);
+  }
+  const rows = db.prepare(`
+    SELECT id, name, email, role, status, frozen_until, freeze_reason, created_at FROM users
+    WHERE ${where.join(' AND ')}
+    ORDER BY ${USER_SORTS[sortKey]}
+  `).all(...params);
+  res.json({ users: rows });
 });
 
 // Смена роли — только владелец

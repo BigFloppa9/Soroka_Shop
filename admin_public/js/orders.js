@@ -52,7 +52,7 @@ Admin.register('orders', async (root) => {
     const options = ORDER_SORT_BY_HEADER[col];
     const active = options.includes(ordersState.sort);
     if (!active) return '';
-    return ordersState.sort.endsWith('_asc') || ordersState.sort === 'oldest' ? ' ↑' : ' ✔';
+    return ordersState.sort.endsWith('_asc') || ordersState.sort === 'oldest' ? ' ↑' : ' ↓';
   }
 
   function onHeaderClick(col) {

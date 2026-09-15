@@ -80,7 +80,7 @@ function sortIndicator(col) {
   const options = PRODUCT_SORT_BY_HEADER[col];
   const active = options.includes(productsState.sort);
   if (!active) return '';
-  return productsState.sort === 'price_asc' ? ' ↑' : ' ✔';
+  return productsState.sort === 'price_asc' ? ' ↑' : ' ↓';
 }
 
 function onProductHeaderClick(root, col) {
@@ -208,8 +208,8 @@ function openProductModal(root, product, categories) {
         <button type="button" class="btn btn-outline btn-sm" id="apply-icon-shape-btn" style="margin-top:8px;">Применить</button>
       </div>
       <div class="field">
-        <label>Или загрузить свою (SVG, до 200KB)</label>
-        <input type="file" id="custom-icon-input" accept=".svg,image/svg+xml">
+        <label>Или загрузить свою (SVG, PNG, JPG, WebP — до 500KB)</label>
+        <input type="file" id="custom-icon-input" accept=".svg,.png,.jpg,.jpeg,.webp,image/svg+xml,image/png,image/jpeg,image/webp">
       </div>
     </div>` : ''}
   `);
@@ -257,15 +257,20 @@ function openProductModal(root, product, categories) {
   modal.querySelector('#custom-icon-input')?.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 200 * 1024) { toast('Файл больше 200KB'); e.target.value = ''; return; }
+    if (file.size > 500 * 1024) { toast('Файл больше 500KB'); e.target.value = ''; return; }
     try {
-      const svgText = await file.text();
-      await api.put(`/api/admin/products/${product.id}/icon`, { custom_icon_svg: svgText });
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      await api.put(`/api/admin/products/${product.id}/icon`, { custom_icon_data_url: dataUrl });
       toast('Своя иконка загружена');
       closeModal();
       renderProducts(root);
     } catch (err) {
-      toast(err.message);
+      toast(err.message || 'Не удалось загрузить файл');
     } finally {
       e.target.value = '';
     }

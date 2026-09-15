@@ -20,6 +20,15 @@ try {
 }
 
 try {
+  const insertIfMissing = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+  insertIfMissing.run('hero_eyebrow', 'Новый заход, старые повадки');
+  insertIfMissing.run('hero_title', 'Всего понемногу — и всё стоящее');
+  insertIfMissing.run('hero_subtitle', 'Одежда, электроника, книги, продукты и мелочи для дома — собрали в одном месте то, что обычно ищешь по пять вкладок сразу.');
+} catch (e) {
+  console.error('Не удалось дозаполнить настройки главной страницы:', e.message);
+}
+
+try {
   const { purgeExpiredDeletedUsers } = require('./cleanup');
   const purged = purgeExpiredDeletedUsers();
   if (purged) console.log(`Очищено просроченных удалённых аккаунтов: ${purged}`);
@@ -59,13 +68,16 @@ app.use(async (req, res, next) => {
     req.path.startsWith('/admin') || req.path === '/captcha.html' || req.path === '/favicon.ico';
   if (skip) return next();
   if (req.cookies?.captcha_ok) return next();
+  if (!req.cookies?.visited) {
+    return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}`);
+  }
   if (isSuspicious(req.ip)) {
     return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}`);
   }
   let vpn = false;
   try { vpn = await isVpnOrProxy(req.ip); } catch (e) {}
   if (vpn) {
-    return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}`);
+    return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}&mode=vpn`);
   }
   next();
 });
@@ -74,6 +86,7 @@ app.use(async (req, res, next) => {
 app.get('/api/ping', (req, res) => res.json({ ok: true, t: Date.now() }));
 app.post('/api/captcha/verify', (req, res) => {
   res.cookie('captcha_ok', '1', { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 });
+  res.cookie('visited', '1', { httpOnly: true, sameSite: 'lax', maxAge: 365 * 24 * 60 * 60 * 1000 });
   res.json({ ok: true });
 });
 
@@ -138,14 +151,16 @@ function startServer(port, attemptsLeft) {
   });
 
   server.on('error', (err) => {
-    if (err.code !== 'EADDRINUSE') throw err;
+    if (err.code !== 'EADDRINUSE' && err.code !== 'EACCES') throw err;
+    const reason = err.code === 'EACCES' ? 'недоступен (Windows зарезервировал его или блокирует антивирус)' : 'занят';
+    const nextPort = err.code === 'EACCES' ? port + 111 : port + 1;
     if (AUTO_PICK_PORT && attemptsLeft > 0) {
-      console.log(`Порт ${port} занят, пробую ${port + 1}...`);
-      startServer(port + 1, attemptsLeft - 1);
+      console.log(`Порт ${port} ${reason}, пробую ${nextPort}...`);
+      startServer(nextPort, attemptsLeft - 1);
       return;
     }
     if (!AUTO_PICK_PORT) {
-      console.error(`Порт ${port} занят (задан через переменную окружения PORT хостингом).`);
+      console.error(`Порт ${port} ${reason} (задан через переменную окружения PORT хостингом).`);
       process.exit(1);
       return;
     }
@@ -164,4 +179,4 @@ function startServer(port, attemptsLeft) {
   });
 }
 
-startServer(DEFAULT_PORT, 10);
+startServer(DEFAULT_PORT, 15);

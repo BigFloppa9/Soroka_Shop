@@ -127,6 +127,9 @@ function run() {
     insertSetting.run('store_phone', '+7 900 123-45-67');
     insertSetting.run('store_address', 'г. Тверь, ул. Гагарина, 14');
     insertSetting.run('store_description', 'Собираем в одном месте всё самое нужное и немного блестящего.');
+    insertSetting.run('hero_eyebrow', 'Новый заход, старые повадки');
+    insertSetting.run('hero_title', 'Всего понемногу — и всё стоящее');
+    insertSetting.run('hero_subtitle', 'Одежда, электроника, книги, продукты и мелочи для дома — собрали в одном месте то, что обычно ищешь по пять вкладок сразу.');
     insertSetting.run('social_intro', 'Мы в соцсетях:');
     insertSetting.run('social_links', JSON.stringify([
       { prefix: 'TG', url: 'https://t.me/soroka_shop_demo' },

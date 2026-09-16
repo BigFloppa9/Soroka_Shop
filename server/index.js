@@ -50,8 +50,8 @@ app.use(attachUser);
 // скользящее окно; если слишком много - отправляет на страницу проверки
 // вместо страницы. Это демонстрационная защита, а не полноценная
 // антибот-система.
-const RATE_WINDOW_MS = 10000;
-const RATE_THRESHOLD = 30;
+const RATE_WINDOW_MS = 12000;
+const RATE_THRESHOLD = 4; // 5-й переход за окно уже считается подозрительным
 const rateBuckets = new Map();
 function isSuspicious(ip) {
   const now = Date.now();
@@ -67,17 +67,34 @@ app.use(async (req, res, next) => {
     req.path.startsWith('/js') || req.path.startsWith('/images') ||
     req.path.startsWith('/admin') || req.path === '/captcha.html' || req.path === '/favicon.ico';
   if (skip) return next();
-  if (req.cookies?.captcha_ok) return next();
-  if (!req.cookies?.visited) {
-    return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}`);
+
+  // Частоту переходов считаем всегда, даже у тех, кто недавно прошёл капчу -
+  // иначе спам сразу после первого захода (пока действует captcha_ok) никогда
+  // не будет замечен.
+  const suspicious = isSuspicious(req.ip);
+
+  if (req.cookies?.captcha_ok) {
+    if (suspicious) {
+      return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}`);
+    }
+    return next();
   }
-  if (isSuspicious(req.ip)) {
-    return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}`);
-  }
+
+  // VPN-проверку раньше делали только для уже "знакомых" посетителей без
+  // captcha_ok - то есть практически никогда, ведь captcha_ok выставляется
+  // сразу при первом заходе и живёт 5 минут. Проверяем при каждом заходе,
+  // который приведёт к показу капчи, включая самый первый.
   let vpn = false;
-  try { vpn = await isVpnOrProxy(req.ip); } catch (e) {}
-  if (vpn) {
-    return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}&mode=vpn`);
+  try {
+    vpn = await isVpnOrProxy(req.ip);
+  } catch (e) {
+    console.error('Ошибка проверки VPN/прокси:', e.message);
+  }
+
+  const firstVisit = !req.cookies?.visited;
+  if (firstVisit || suspicious || vpn) {
+    const mode = vpn ? '&mode=vpn' : '';
+    return res.redirect(`/captcha.html?next=${encodeURIComponent(req.originalUrl)}${mode}`);
   }
   next();
 });

@@ -1,6 +1,12 @@
-let usersState = { roles: [], sort: 'newest' };
-const USER_SORT_BY_HEADER = { name: ['name'], created_at: ['newest', 'oldest'] };
+let usersState = { roles: [], sort: { col: 'created_at', dir: 'desc' } };
 const USER_ROLE_LABELS = { customer: 'Покупатель', admin: 'Администратор', owner: 'Владелец' };
+const USER_COMPARATORS = {
+  name: (a, b) => a.name.localeCompare(b.name, 'ru'),
+  email: (a, b) => a.email.localeCompare(b.email, 'ru'),
+  role: (a, b) => (USER_ROLE_LABELS[a.role] || a.role).localeCompare(USER_ROLE_LABELS[b.role] || b.role, 'ru'),
+  status: (a, b) => a.status.localeCompare(b.status, 'ru'),
+  created_at: (a, b) => new Date(a.created_at) - new Date(b.created_at),
+};
 
 Admin.register('users', async (root) => {
   root.innerHTML = `
@@ -40,34 +46,23 @@ Admin.register('users', async (root) => {
   await load();
   Admin.startLive(() => { if (!document.getElementById('active-modal')) load(true); }, 8000);
 
-  function sortIndicator(col) {
-    const options = USER_SORT_BY_HEADER[col];
-    if (!options.includes(usersState.sort)) return '';
-    return usersState.sort === 'oldest' ? ' ↑' : ' ↓';
-  }
-
-  function onHeaderClick(col) {
-    const options = USER_SORT_BY_HEADER[col];
-    const idx = options.indexOf(usersState.sort);
-    usersState.sort = options[(idx + 1) % options.length];
-    load();
-  }
-
   async function load(silent) {
     const wrap = document.getElementById('users-wrap');
     if (!silent) wrap.innerHTML = '<div class="empty-note">Загрузка…</div>';
     try {
       const q = new URLSearchParams();
       if (usersState.roles.length) q.set('role', usersState.roles.join(','));
-      if (usersState.sort) q.set('sort', usersState.sort);
-      const { users } = await api.get(`/api/admin/users?${q.toString()}`);
+      let { users } = await api.get(`/api/admin/users?${q.toString()}`);
+      users = applySort(users, usersState.sort, USER_COMPARATORS);
 
       wrap.innerHTML = `
         <table class="admin-table">
           <thead><tr>
-            <th class="sortable-th" data-col="name">Имя${sortIndicator('name')}</th>
-            <th>Email</th><th>Роль</th><th>Статус</th>
-            <th class="sortable-th" data-col="created_at">Регистрация${sortIndicator('created_at')}</th>
+            <th class="sortable-th" data-col="name">Имя${sortIndicator(usersState.sort, 'name')}</th>
+            <th class="sortable-th" data-col="email">Email${sortIndicator(usersState.sort, 'email')}</th>
+            <th class="sortable-th" data-col="role">Роль${sortIndicator(usersState.sort, 'role')}</th>
+            <th class="sortable-th" data-col="status">Статус${sortIndicator(usersState.sort, 'status')}</th>
+            <th class="sortable-th" data-col="created_at">Регистрация${sortIndicator(usersState.sort, 'created_at')}</th>
             <th></th>
           </tr></thead>
           <tbody>
@@ -110,7 +105,7 @@ Admin.register('users', async (root) => {
       `;
       wrap.querySelectorAll('.sortable-th').forEach(th => {
         th.style.cursor = 'pointer';
-        th.addEventListener('click', () => onHeaderClick(th.dataset.col));
+        th.addEventListener('click', () => onSortHeaderClick(usersState.sort, th.dataset.col, load));
       });
       wrap.querySelectorAll('[data-role]').forEach(select => {
         select.addEventListener('change', async () => {

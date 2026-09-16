@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
+const { markOnline } = require('../online-tracker');
 
 const SECRET = process.env.JWT_SECRET || 'soroka-shop-dev-secret-change-me';
 
@@ -15,6 +16,7 @@ function attachUser(req, res, next) {
       // невалидный или просроченный токен — просто считаем гостем
     }
   }
+  if (req.user) markOnline(req.user);
   next();
 }
 

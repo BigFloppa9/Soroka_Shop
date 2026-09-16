@@ -1,3 +1,25 @@
+// Общая сортировка по клику на заголовок таблицы — двусторонняя (asc/desc)
+// для любой колонки, у которой есть компаратор.
+function sortIndicator(state, col) {
+  if (state.col !== col) return '';
+  return state.dir === 'asc' ? ' ↑' : ' ↓';
+}
+function onSortHeaderClick(state, col, redraw) {
+  if (state.col === col) {
+    state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.col = col;
+    state.dir = 'asc';
+  }
+  redraw();
+}
+function applySort(list, state, comparators) {
+  const cmp = state.col && comparators[state.col];
+  if (!cmp) return list;
+  const sorted = [...list].sort(cmp);
+  return state.dir === 'desc' ? sorted.reverse() : sorted;
+}
+
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }

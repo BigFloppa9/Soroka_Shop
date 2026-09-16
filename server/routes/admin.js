@@ -5,6 +5,7 @@ const db = require('../db');
 const { requireAdmin, requireOwner } = require('../middleware/auth');
 const { generateProductImages } = require('../gen-images');
 const { decrypt } = require('../crypto-util');
+const { getOnlineUsers } = require('../online-tracker');
 
 const router = express.Router();
 router.use(requireAdmin);
@@ -29,7 +30,22 @@ router.get('/stats', (req, res) => {
   const revenue = db.prepare(`SELECT COALESCE(SUM(total),0) s FROM orders WHERE status != 'cancelled'`).get().s;
   const newOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE status = 'new'`).get().c;
   const lowStock = db.prepare('SELECT COUNT(*) c FROM products WHERE stock <= 5').get().c;
-  res.json({ productCount, orderCount, userCount, revenue, newOrders, lowStock });
+
+  const recentUsers = db.prepare(`
+    SELECT id, name, email, role, created_at FROM users
+    WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 6
+  `).all();
+  const recentOrders = db.prepare(`
+    SELECT o.id, o.total, o.status, o.created_at, u.name as user_name
+    FROM orders o JOIN users u ON u.id = o.user_id
+    ORDER BY o.created_at DESC LIMIT 6
+  `).all();
+  const onlineUsers = getOnlineUsers();
+
+  res.json({
+    productCount, orderCount, userCount, revenue, newOrders, lowStock,
+    recentUsers, recentOrders, onlineUsers, onlineCount: onlineUsers.length,
+  });
 });
 
 // ---- Категории ----

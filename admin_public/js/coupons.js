@@ -1,3 +1,11 @@
+let couponsState = { sort: { col: null, dir: 'asc' } };
+const COUPON_COMPARATORS = {
+  code: (a, b) => a.code.localeCompare(b.code, 'ru'),
+  percent: (a, b) => a.percent - b.percent,
+  usage: (a, b) => a.used_count - b.used_count,
+  active: (a, b) => Number(a.active) - Number(b.active),
+};
+
 Admin.register('coupons', async (root) => {
   root.innerHTML = `
     <div class="toolbar">
@@ -15,14 +23,22 @@ Admin.register('coupons', async (root) => {
   async function load() {
     const wrap = document.getElementById('coupons-wrap');
     try {
-      const { coupons } = await api.get('/api/admin/coupons');
+      let { coupons } = await api.get('/api/admin/coupons');
+      coupons = applySort(coupons, couponsState.sort, COUPON_COMPARATORS);
       if (coupons.length === 0) {
         wrap.innerHTML = '<p class="empty-note">Купонов пока нет.</p>';
         return;
       }
       wrap.innerHTML = `
         <table class="admin-table">
-          <thead><tr><th>Код</th><th>Скидка</th><th>Категории</th><th>Использования</th><th>Статус</th><th></th></tr></thead>
+          <thead><tr>
+            <th class="sortable-th" data-col="code">Код${sortIndicator(couponsState.sort, 'code')}</th>
+            <th class="sortable-th" data-col="percent">Скидка${sortIndicator(couponsState.sort, 'percent')}</th>
+            <th>Категории</th>
+            <th class="sortable-th" data-col="usage">Использования${sortIndicator(couponsState.sort, 'usage')}</th>
+            <th class="sortable-th" data-col="active">Статус${sortIndicator(couponsState.sort, 'active')}</th>
+            <th></th>
+          </tr></thead>
           <tbody>
             ${coupons.map(c => {
               let catIds = [];
@@ -47,6 +63,10 @@ Admin.register('coupons', async (root) => {
           </tbody>
         </table>
       `;
+      wrap.querySelectorAll('.sortable-th').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', () => onSortHeaderClick(couponsState.sort, th.dataset.col, load));
+      });
       wrap.querySelectorAll('[data-edit]').forEach(btn => {
         btn.addEventListener('click', () => {
           const coupon = coupons.find(c => c.code === btn.dataset.edit);

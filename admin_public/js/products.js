@@ -3,12 +3,13 @@ Admin.register('products', async (root) => {
   Admin.startLive(() => { if (!document.getElementById('active-modal')) refreshProductsData(root); }, 10000);
 });
 
-let productsState = { sort: 'newest', categories: [] };
-const PRODUCT_SORT_BY_HEADER = {
-  title: ['title'],
-  category: ['category'],
-  price: ['price_asc', 'price_desc'],
-  stock: ['stock'],
+let productsState = { sort: { col: null, dir: 'asc' }, categories: [] };
+const PRODUCT_COMPARATORS = {
+  title: (a, b) => a.title.localeCompare(b.title, 'ru'),
+  category: (a, b) => (a.category_name || '').localeCompare(b.category_name || '', 'ru'),
+  price: (a, b) => a.price - b.price,
+  stock: (a, b) => a.stock - b.stock,
+  popular: (a, b) => Number(a.is_popular) - Number(b.is_popular),
 };
 
 async function renderProducts(root) {
@@ -76,35 +77,14 @@ async function refreshProductsData(root, categoriesArg) {
   }
 }
 
-function sortIndicator(col) {
-  const options = PRODUCT_SORT_BY_HEADER[col];
-  const active = options.includes(productsState.sort);
-  if (!active) return '';
-  return productsState.sort === 'price_asc' ? ' ↑' : ' ↓';
-}
-
-function onProductHeaderClick(root, col) {
-  const options = PRODUCT_SORT_BY_HEADER[col];
-  const idx = options.indexOf(productsState.sort);
-  productsState.sort = options[(idx + 1) % options.length];
-  drawTable(root, null, true);
-}
-
-const PRODUCT_SORT_COMPARE = {
-  title: (a, b) => a.title.localeCompare(b.title, 'ru'),
-  category: (a, b) => (a.category_name || '').localeCompare(b.category_name || '', 'ru'),
-  price_asc: (a, b) => a.price - b.price,
-  price_desc: (a, b) => b.price - a.price,
-  stock: (a, b) => a.stock - b.stock,
-  newest: (a, b) => new Date(b.created_at) - new Date(a.created_at),
-};
-
 function drawTable(root, categoriesArg, keepCategories) {
   const wrap = document.getElementById('prod-table-wrap');
   const categories = categoriesArg || [];
   const catIds = productsState.categories;
   let list = catIds.length ? allProductsCache.filter(p => catIds.includes(String(p.category_id))) : allProductsCache;
-  list = [...list].sort(PRODUCT_SORT_COMPARE[productsState.sort] || PRODUCT_SORT_COMPARE.newest);
+  list = productsState.sort.col
+    ? applySort(list, productsState.sort, PRODUCT_COMPARATORS)
+    : [...list].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   if (list.length === 0) {
     wrap.innerHTML = '<p class="empty-note">Товаров нет.</p>';
     return;
@@ -113,11 +93,11 @@ function drawTable(root, categoriesArg, keepCategories) {
     <table class="admin-table">
       <thead><tr>
         <th></th>
-        <th class="sortable-th" data-col="title">Название${sortIndicator('title')}</th>
-        <th class="sortable-th" data-col="category">Категория${sortIndicator('category')}</th>
-        <th class="sortable-th" data-col="price">Цена${sortIndicator('price')}</th>
-        <th class="sortable-th" data-col="stock">Остаток${sortIndicator('stock')}</th>
-        <th>Популярный</th><th></th>
+        <th class="sortable-th" data-col="title">Название${sortIndicator(productsState.sort, 'title')}</th>
+        <th class="sortable-th" data-col="category">Категория${sortIndicator(productsState.sort, 'category')}</th>
+        <th class="sortable-th" data-col="price">Цена${sortIndicator(productsState.sort, 'price')}</th>
+        <th class="sortable-th" data-col="stock">Остаток${sortIndicator(productsState.sort, 'stock')}</th>
+        <th class="sortable-th" data-col="popular">Популярный${sortIndicator(productsState.sort, 'popular')}</th><th></th>
       </tr></thead>
       <tbody>
         ${list.map(p => `
@@ -139,7 +119,7 @@ function drawTable(root, categoriesArg, keepCategories) {
   `;
   wrap.querySelectorAll('.sortable-th').forEach(th => {
     th.style.cursor = 'pointer';
-    th.addEventListener('click', () => onProductHeaderClick(root, th.dataset.col));
+    th.addEventListener('click', () => onSortHeaderClick(productsState.sort, th.dataset.col, () => drawTable(root, categories)));
   });
   wrap.querySelectorAll('[data-edit]').forEach(btn => {
     btn.addEventListener('click', () => {

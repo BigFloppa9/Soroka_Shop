@@ -3,10 +3,18 @@ const CATEGORY_ICON_OPTIONS = [
   ['home', 'Дом'], ['books', 'Книги'], ['beauty', 'Красота'], ['box', 'Другое'],
 ];
 
+let categoriesState = { sort: { col: null, dir: 'asc' } };
+const CATEGORY_COMPARATORS = {
+  name: (a, b) => a.name.localeCompare(b.name, 'ru'),
+  slug: (a, b) => a.slug.localeCompare(b.slug, 'ru'),
+  icon: (a, b) => a.icon.localeCompare(b.icon, 'ru'),
+};
+
 Admin.register('categories', async (root) => {
   await renderCategories(root);
 });
 
+let allCategoriesCache = [];
 async function renderCategories(root) {
   root.innerHTML = `
     <div class="toolbar">
@@ -19,49 +27,66 @@ async function renderCategories(root) {
 
   try {
     const { categories } = await api.get('/api/admin/categories');
-    const wrap = document.getElementById('cat-table-wrap');
-    if (categories.length === 0) {
-      wrap.innerHTML = '<p class="empty-note">Категорий пока нет.</p>';
-      return;
-    }
-    wrap.innerHTML = `
-      <table class="admin-table">
-        <thead><tr><th>Название</th><th>Слаг</th><th>Иконка</th><th></th></tr></thead>
-        <tbody>
-          ${categories.map(c => `
-            <tr data-id="${c.id}">
-              <td>${escapeHtml(c.name)}</td>
-              <td style="color:var(--muted);">${escapeHtml(c.slug)}</td>
-              <td>${escapeHtml(c.icon)}</td>
-              <td style="text-align:right; white-space:nowrap;">
-                <button class="btn btn-outline btn-sm" data-edit="${c.id}">Изменить</button>
-                <button class="btn btn-danger btn-sm" data-del="${c.id}">Удалить</button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
-
-    wrap.querySelectorAll('[data-edit]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const cat = categories.find(c => c.id == btn.dataset.edit);
-        openCategoryModal(root, cat);
-      });
-    });
-    wrap.querySelectorAll('[data-del]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Удалить категорию? Это действие необратимо.')) return;
-        try {
-          await api.del(`/api/admin/categories/${btn.dataset.del}`);
-          toast('Категория удалена');
-          renderCategories(root);
-        } catch (e) { toast(e.message); }
-      });
-    });
+    allCategoriesCache = categories;
+    drawCategoriesTable(root);
   } catch (e) {
     document.getElementById('cat-table-wrap').innerHTML = '<p class="empty-note">Не удалось загрузить категории.</p>';
   }
+}
+
+function drawCategoriesTable(root) {
+  const wrap = document.getElementById('cat-table-wrap');
+  const categories = categoriesState.sort.col
+    ? applySort(allCategoriesCache, categoriesState.sort, CATEGORY_COMPARATORS)
+    : allCategoriesCache;
+  if (categories.length === 0) {
+    wrap.innerHTML = '<p class="empty-note">Категорий пока нет.</p>';
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="admin-table">
+      <thead><tr>
+        <th class="sortable-th" data-col="name">Название${sortIndicator(categoriesState.sort, 'name')}</th>
+        <th class="sortable-th" data-col="slug">Слаг${sortIndicator(categoriesState.sort, 'slug')}</th>
+        <th class="sortable-th" data-col="icon">Иконка${sortIndicator(categoriesState.sort, 'icon')}</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        ${categories.map(c => `
+          <tr data-id="${c.id}">
+            <td>${escapeHtml(c.name)}</td>
+            <td style="color:var(--muted);">${escapeHtml(c.slug)}</td>
+            <td>${escapeHtml(c.icon)}</td>
+            <td style="text-align:right; white-space:nowrap;">
+              <button class="btn btn-outline btn-sm" data-edit="${c.id}">Изменить</button>
+              <button class="btn btn-danger btn-sm" data-del="${c.id}">Удалить</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  wrap.querySelectorAll('.sortable-th').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => onSortHeaderClick(categoriesState.sort, th.dataset.col, () => drawCategoriesTable(root)));
+  });
+  wrap.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = allCategoriesCache.find(c => c.id == btn.dataset.edit);
+      openCategoryModal(root, cat);
+    });
+  });
+  wrap.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Удалить категорию? Это действие необратимо.')) return;
+      try {
+        await api.del(`/api/admin/categories/${btn.dataset.del}`);
+        toast('Категория удалена');
+        renderCategories(root);
+      } catch (e) { toast(e.message); }
+    });
+  });
 }
 
 function openCategoryModal(root, cat) {

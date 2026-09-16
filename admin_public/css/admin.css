@@ -72,6 +72,12 @@ a { color: inherit; }
 .stat-card .num { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; }
 .stat-card .label { font-size: 12px; color: var(--muted); font-weight: 600; }
 
+.overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.overview-panel { background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 14px 16px; }
+.overview-panel h4 { margin: 0 0 10px; font-size: 13px; }
+.overview-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.overview-list li { font-size: 13px; line-height: 1.4; }
+
 .admin-table { width: 100%; border-collapse: collapse; background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--radius-m); overflow: hidden; }
 .admin-table th, .admin-table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
 .admin-table th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: var(--paper-deep); }

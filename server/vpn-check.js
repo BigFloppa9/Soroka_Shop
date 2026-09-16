@@ -37,13 +37,17 @@ async function isVpnOrProxy(ip) {
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.result;
 
   let result = null;
+  const errors = [];
   for (const check of [checkProxycheck, checkIpApi]) {
     try {
       result = await check(ip);
       if (result !== null) break;
-    } catch (e) { /* пробуем следующий сервис в цепочке */ }
+    } catch (e) { errors.push(`${check.name}: ${e.message}`); }
   }
-  if (result === null) result = false; // оба сервиса недоступны — не блокируем пользователя
+  if (result === null) {
+    if (errors.length) console.error(`VPN-детект недоступен для ${ip} — ${errors.join('; ')}`);
+    result = false; // оба сервиса недоступны — не блокируем пользователя
+  }
 
   vpnCache.set(ip, { result, ts: Date.now() });
   return result;

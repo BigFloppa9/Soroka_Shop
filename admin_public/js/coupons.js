@@ -45,10 +45,11 @@ Admin.register('coupons', async (root) => {
               try { catIds = c.category_ids ? JSON.parse(c.category_ids) : []; } catch (e) {}
               const catNames = catIds.length ? catIds.map(id => categories.find(cat => cat.id === id)?.name || '?').join(', ') : 'Все категории';
               const usageText = c.usage_limit ? `${c.used_count} / ${c.usage_limit}` : `${c.used_count} / без лимита`;
+              const discountText = c.discount_type === 'fixed' ? `${c.fixed_amount} ₽` : `${c.percent}%`;
               return `
               <tr>
                 <td><strong>${escapeHtml(c.code)}</strong></td>
-                <td>${c.percent}%</td>
+                <td>${discountText}${c.min_order_amount ? `<br><span style="color:var(--muted); font-size:12px;">от ${c.min_order_amount} ₽</span>` : ''}</td>
                 <td style="font-size:13px; color:var(--muted);">${escapeHtml(catNames)}</td>
                 <td style="font-size:13px;">${usageText}${c.per_user_once ? '<br><span style="color:var(--muted);">1 раз/чел.</span>' : ''}</td>
                 <td><span class="pill ${c.active ? 'pill-active' : 'pill-blocked'}">${c.active ? 'активен' : 'выключен'}</span></td>
@@ -99,25 +100,64 @@ Admin.register('coupons', async (root) => {
   function openCouponModal(existing) {
     let existingCatIds = [];
     try { existingCatIds = existing?.category_ids ? JSON.parse(existing.category_ids) : []; } catch (e) {}
+    const type = existing?.discount_type === 'fixed' ? 'fixed' : 'percent';
+    const amount = existing ? (type === 'fixed' ? existing.fixed_amount : existing.percent) : 10;
 
     const modal = openModal(`
       <h3>${existing ? 'Изменить купон' : 'Новый купон'}</h3>
       <div class="alert alert-error" id="coupon-modal-error"></div>
       <div class="field"><label>Код</label><input id="coupon-code" placeholder="Например, FREE" style="text-transform:uppercase;" value="${existing ? escapeHtml(existing.code) : ''}" ${existing ? 'disabled' : ''}></div>
-      <div class="field"><label>Скидка, %</label><input id="coupon-percent" type="number" min="1" max="90" value="${existing ? existing.percent : 10}"></div>
+
+      <div class="field">
+        <label>Скидка</label>
+        <div class="coupon-discount-row">
+          <input id="coupon-amount" type="number" min="1" ${type === 'percent' ? 'max="90"' : ''} value="${amount}">
+          <div class="unit-toggle" id="coupon-unit-toggle">
+            <button type="button" id="coupon-unit-btn">${type === 'percent' ? '%' : '₽'} ⌄</button>
+            <div class="unit-menu hidden" id="coupon-unit-menu">
+              <div data-unit="percent">%</div>
+              <div data-unit="fixed">₽</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>От, ₽<span class="info-tip" tabindex="0">i<span class="info-tip-bubble">Купон применяется, только если сумма корзины не меньше этого значения. Пусто — без ограничения.</span></span></label>
+        <input id="coupon-min-order" type="number" min="0" placeholder="без ограничения" value="${existing?.min_order_amount ?? ''}">
+      </div>
+
       <div class="field">
         <label>Категории (если ни одна не отмечена — купон действует на всё)</label>
         ${categories.map(cat => `
           <label class="check-row"><input type="checkbox" class="coupon-cat-cb" value="${cat.id}" ${existingCatIds.includes(cat.id) ? 'checked' : ''}> ${escapeHtml(cat.name)}</label>
         `).join('')}
       </div>
+
+      <label class="check-row"><input type="checkbox" id="coupon-per-user-once" ${existing ? (existing.per_user_once ? 'checked' : '') : 'checked'}> Не более 1 раза на пользователя</label>
       <div class="field"><label>Лимит использований всего (пусто — без лимита)</label><input id="coupon-usage-limit" type="number" min="1" value="${existing?.usage_limit ?? ''}"></div>
-      <label class="check-row"><input type="checkbox" id="coupon-per-user-once" ${existing?.per_user_once ? 'checked' : ''}> Не более 1 раза на пользователя</label>
+
       <div class="modal-actions">
         <button type="button" class="btn btn-outline" id="coupon-cancel">Отмена</button>
         <button type="button" class="btn btn-primary" id="coupon-save">${existing ? 'Сохранить' : 'Создать'}</button>
       </div>
     `);
+
+    let unit = type;
+    const unitBtn = modal.querySelector('#coupon-unit-btn');
+    const unitMenu = modal.querySelector('#coupon-unit-menu');
+    const amountInput = modal.querySelector('#coupon-amount');
+    unitBtn.addEventListener('click', (e) => { e.stopPropagation(); unitMenu.classList.toggle('hidden'); });
+    unitMenu.querySelectorAll('[data-unit]').forEach(opt => {
+      opt.addEventListener('click', () => {
+        unit = opt.dataset.unit;
+        unitBtn.textContent = unit === 'percent' ? '% ⌄' : '₽ ⌄';
+        if (unit === 'percent') amountInput.setAttribute('max', '90'); else amountInput.removeAttribute('max');
+        unitMenu.classList.add('hidden');
+      });
+    });
+    modal.addEventListener('click', () => unitMenu.classList.add('hidden'));
+
     modal.querySelector('#coupon-cancel').addEventListener('click', closeModal);
     modal.querySelector('#coupon-save').addEventListener('click', async () => {
       const errEl = document.getElementById('coupon-modal-error');
@@ -126,7 +166,10 @@ Admin.register('coupons', async (root) => {
       try {
         await api.post('/api/admin/coupons', {
           code: existing ? existing.code : document.getElementById('coupon-code').value,
-          percent: Number(document.getElementById('coupon-percent').value),
+          discount_type: unit,
+          percent: unit === 'percent' ? Number(amountInput.value) : undefined,
+          fixed_amount: unit === 'fixed' ? Number(amountInput.value) : undefined,
+          min_order_amount: document.getElementById('coupon-min-order').value,
           category_ids: catIds,
           usage_limit: document.getElementById('coupon-usage-limit').value,
           per_user_once: document.getElementById('coupon-per-user-once').checked,

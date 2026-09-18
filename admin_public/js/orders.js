@@ -137,6 +137,11 @@ Admin.register('orders', async (root) => {
           if (order) openOrderDetail(order);
         });
       });
+      if (Admin.pendingOrderId) {
+        const order = orders.find(o => o.id == Admin.pendingOrderId);
+        Admin.pendingOrderId = null;
+        if (order) openOrderDetail(order);
+      }
     } catch (e) {
       if (!silent) wrap.innerHTML = '<p class="empty-note">Не удалось загрузить заказы.</p>';
     }

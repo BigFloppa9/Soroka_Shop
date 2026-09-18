@@ -166,10 +166,11 @@ const Site = {
   async init() {
     this.applyStoredTheme();
     await this.loadUser();
+    if (Site._resolveUserReady) Site._resolveUserReady();
     await Promise.all([this.loadCartState(), this.loadFavoriteState()]);
-    this.renderHeader();
-    this.renderFooter();
-    this.renderAnnouncements();
+    try { this.renderHeader(); } catch (e) { console.error('renderHeader:', e); }
+    try { this.renderFooter(); } catch (e) { console.error('renderFooter:', e); }
+    try { this.renderAnnouncements(); } catch (e) { console.error('renderAnnouncements:', e); }
     try {
       if (sessionStorage.getItem('soroka-revived') === '1') {
         sessionStorage.removeItem('soroka-revived');
@@ -386,7 +387,7 @@ const Site = {
       try {
         const { notifications } = await api.get('/api/notifications');
         panel.innerHTML = `
-          <div class="notif-header"><span>Уведомления</span><button id="notif-read-all">Прочитать всё</button></div>
+          <div class="notif-header"><span>Уведомления</span><div style="display:flex; align-items:center; gap:10px;"><button id="notif-read-all">Прочитать всё</button><button id="notif-close" class="icon-btn" aria-label="Закрыть" title="Закрыть" style="width:22px; height:22px;">✕</button></div></div>
           ${notifications.length ? notifications.map(n => `
             <div class="notif-item">
               <div>${escapeHtml(n.message)}</div>
@@ -397,6 +398,9 @@ const Site = {
         panel.querySelector('#notif-read-all')?.addEventListener('click', async () => {
           await api.post('/api/notifications/read-all');
           this.refreshNotifBadge();
+        });
+        panel.querySelector('#notif-close')?.addEventListener('click', () => {
+          panel.classList.add('hidden');
         });
       } catch (e) {
         panel.innerHTML = '<div class="notif-empty">Не удалось загрузить</div>';
@@ -552,5 +556,6 @@ const Site = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  Site.userReady = new Promise(resolve => { Site._resolveUserReady = resolve; });
   Site.ready = Site.init();
 });

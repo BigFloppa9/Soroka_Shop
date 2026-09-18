@@ -31,16 +31,19 @@ router.get('/stats', (req, res) => {
   const newOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE status = 'new'`).get().c;
   const lowStock = db.prepare('SELECT COUNT(*) c FROM products WHERE stock <= 5').get().c;
 
-  const recentUsers = db.prepare(`
+  const recentUsersRaw = db.prepare(`
     SELECT id, name, email, role, created_at FROM users
     WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 6
   `).all();
+  const isOwner = req.user.role === 'owner';
+  const recentUsers = isOwner ? recentUsersRaw : recentUsersRaw.map(u => ({ ...u, email: maskEmail(u.email) }));
   const recentOrders = db.prepare(`
     SELECT o.id, o.total, o.status, o.created_at, u.name as user_name
     FROM orders o JOIN users u ON u.id = o.user_id
     ORDER BY o.created_at DESC LIMIT 6
   `).all();
-  const onlineUsers = getOnlineUsers();
+  const onlineUsersRaw = getOnlineUsers();
+  const onlineUsers = isOwner ? onlineUsersRaw : onlineUsersRaw.map(u => ({ ...u, email: maskEmail(u.email) }));
 
   res.json({
     productCount, orderCount, userCount, revenue, newOrders, lowStock,
@@ -232,7 +235,12 @@ router.get('/orders', (req, res) => {
     ORDER BY ${ORDER_SORTS[sortKey]}
   `).all(...statusList);
   const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
-  res.json({ orders: rows.map(o => { delete o.card_encrypted; return { ...o, items: items.all(o.id) }; }) });
+  const isOwnerView = req.user.role === 'owner';
+  res.json({ orders: rows.map(o => {
+    delete o.card_encrypted;
+    if (!isOwnerView) o.user_email = maskEmail(o.user_email);
+    return { ...o, items: items.all(o.id) };
+  }) });
 });
 
 router.get('/orders/:id/card', requireOwner, (req, res) => {
@@ -278,6 +286,16 @@ router.put('/reviews/:id/reply', (req, res) => {
 });
 
 // ---- Пользователи ----
+function maskEmail(email) {
+  if (!email || !email.includes('@')) return email;
+  const [local, domain] = email.split('@');
+  const maskedLocal = local.length <= 2 ? local[0] + '*' : local.slice(0, 2) + '*'.repeat(local.length - 2);
+  const domainParts = domain.split('.');
+  const firstLabel = domainParts[0] || '';
+  const maskedFirstLabel = firstLabel.length <= 1 ? '*' : firstLabel[0] + '*'.repeat(firstLabel.length - 1);
+  return `${maskedLocal}@${[maskedFirstLabel, ...domainParts.slice(1)].join('.')}`;
+}
+
 const USER_SORTS = { newest: 'created_at DESC', oldest: 'created_at ASC', name: 'name COLLATE NOCASE ASC' };
 router.get('/users', (req, res) => {
   const { role } = req.query;
@@ -294,7 +312,36 @@ router.get('/users', (req, res) => {
     WHERE ${where.join(' AND ')}
     ORDER BY ${USER_SORTS[sortKey]}
   `).all(...params);
-  res.json({ users: rows });
+  const isOwner = req.user.role === 'owner';
+  res.json({ users: isOwner ? rows : rows.map(u => ({ ...u, email: maskEmail(u.email) })) });
+});
+
+// Редактирование имени и почты — доступно администратору (не только владельцу),
+// но полный текущий email всё равно видит только владелец (см. GET /users).
+const NAME_RE_ADMIN = /^[\p{L}\p{N} ]+$/u;
+router.put('/users/:id/profile', (req, res) => {
+  let { name, email } = req.body || {};
+  const updates = {};
+  if (name !== undefined) {
+    name = String(name).trim();
+    if (name.length < 2 || name.length > 40 || !NAME_RE_ADMIN.test(name)) {
+      return res.status(400).json({ error: 'Имя: 2-40 символов, только буквы, цифры и пробелы' });
+    }
+    updates.name = name;
+  }
+  if (email !== undefined) {
+    email = String(email).trim().toLowerCase();
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      return res.status(400).json({ error: 'Некорректный email' });
+    }
+    const existing = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, req.params.id);
+    if (existing) return res.status(409).json({ error: 'Этот email уже используется другим аккаунтом' });
+    updates.email = email;
+  }
+  if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Нечего сохранять' });
+  const setClause = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+  db.prepare(`UPDATE users SET ${setClause} WHERE id = ?`).run(...Object.values(updates), req.params.id);
+  res.json({ ok: true });
 });
 
 // Смена роли — только владелец
@@ -371,15 +418,24 @@ router.get('/coupons', requireOwner, (req, res) => {
   res.json({ coupons: coupons.map(c => ({ ...c, used_count: usedCount.get(c.code).c })) });
 });
 router.post('/coupons', requireOwner, (req, res) => {
-  const { code, percent, category_ids, usage_limit, per_user_once } = req.body || {};
-  if (!code?.trim() || !percent || percent < 1 || percent > 90) {
-    return res.status(400).json({ error: 'Укажите код и процент скидки (1-90)' });
+  const { code, discount_type, percent, fixed_amount, min_order_amount, category_ids, usage_limit, per_user_once } = req.body || {};
+  const type = discount_type === 'fixed' ? 'fixed' : 'percent';
+  if (!code?.trim()) return res.status(400).json({ error: 'Укажите код купона' });
+  if (type === 'percent') {
+    if (!percent || percent < 1 || percent > 90) return res.status(400).json({ error: 'Процент скидки: от 1 до 90' });
+  } else if (!fixed_amount || fixed_amount < 1) {
+    return res.status(400).json({ error: 'Укажите сумму скидки в рублях' });
   }
   const catJson = (Array.isArray(category_ids) && category_ids.length) ? JSON.stringify(category_ids) : null;
   const limit = (usage_limit === '' || usage_limit == null) ? null : Math.max(1, parseInt(usage_limit, 10) || 1);
-  db.prepare(`INSERT INTO coupons (code, percent, active, category_ids, usage_limit, per_user_once) VALUES (?,?,1,?,?,?)
-    ON CONFLICT(code) DO UPDATE SET percent = excluded.percent, active = 1, category_ids = excluded.category_ids, usage_limit = excluded.usage_limit, per_user_once = excluded.per_user_once`)
-    .run(code.trim().toUpperCase(), Math.round(percent), catJson, limit, per_user_once ? 1 : 0);
+  const minOrder = (min_order_amount === '' || min_order_amount == null) ? null : Math.max(0, Math.round(Number(min_order_amount)) || 0);
+  db.prepare(`INSERT INTO coupons (code, percent, discount_type, fixed_amount, min_order_amount, active, category_ids, usage_limit, per_user_once)
+    VALUES (?,?,?,?,?,1,?,?,?)
+    ON CONFLICT(code) DO UPDATE SET percent = excluded.percent, discount_type = excluded.discount_type,
+      fixed_amount = excluded.fixed_amount, min_order_amount = excluded.min_order_amount, active = 1,
+      category_ids = excluded.category_ids, usage_limit = excluded.usage_limit, per_user_once = excluded.per_user_once`)
+    .run(code.trim().toUpperCase(), type === 'percent' ? Math.round(percent) : 0, type,
+      type === 'fixed' ? Math.round(fixed_amount) : null, minOrder, catJson, limit, per_user_once ? 1 : 0);
   res.json({ coupon: db.prepare('SELECT * FROM coupons WHERE code = ?').get(code.trim().toUpperCase()) });
 });
 router.put('/coupons/:code', requireOwner, (req, res) => {

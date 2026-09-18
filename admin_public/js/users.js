@@ -86,6 +86,7 @@ Admin.register('users', async (root) => {
                 </td>
                 <td style="color:var(--muted); font-size:12px;">${new Date(u.created_at).toLocaleDateString('ru-RU')}</td>
                 <td style="text-align:right; white-space:nowrap;">
+                  <button class="btn btn-outline btn-sm" data-edit-profile="${u.id}">Изменить</button>
                   <button class="btn btn-outline btn-sm" data-notify="${u.id}">Написать</button>
                   ${Admin.isOwner ? `
                     <button class="btn btn-outline btn-sm" data-freeze="${u.id}" data-frozen="${frozen ? '1' : '0'}">${frozen ? 'Разморозить' : 'Заморозить'}</button>
@@ -116,6 +117,12 @@ Admin.register('users', async (root) => {
             toast(e.message);
             load();
           }
+        });
+      });
+      wrap.querySelectorAll('[data-edit-profile]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const u = users.find(x => x.id == btn.dataset.editProfile);
+          openEditProfileModal(u, load);
         });
       });
       wrap.querySelectorAll('[data-notify]').forEach(btn => {
@@ -162,6 +169,40 @@ async function unfreezeUser(userId, reload) {
     toast('Пользователь разморожен');
     reload();
   } catch (e) { toast(e.message); }
+}
+
+function openEditProfileModal(user, reload) {
+  const emailKnown = !user.email.includes('*');
+  const modal = openModal(`
+    <h3>Изменить профиль</h3>
+    <div class="alert alert-error" id="edit-profile-error"></div>
+    <div class="field"><label>Имя</label><input id="edit-profile-name" value="${escapeHtml(user.name)}"></div>
+    <div class="field">
+      <label>Email</label>
+      <input id="edit-profile-email" type="email" value="${emailKnown ? escapeHtml(user.email) : ''}" placeholder="${emailKnown ? '' : 'новый email (текущий скрыт — виден только владельцу)'}">
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" id="edit-profile-cancel">Отмена</button>
+      <button type="button" class="btn btn-primary" id="edit-profile-save">Сохранить</button>
+    </div>
+  `);
+  modal.querySelector('#edit-profile-cancel').addEventListener('click', closeModal);
+  modal.querySelector('#edit-profile-save').addEventListener('click', async () => {
+    const errEl = document.getElementById('edit-profile-error');
+    errEl.classList.remove('show');
+    try {
+      const payload = { name: document.getElementById('edit-profile-name').value };
+      const emailVal = document.getElementById('edit-profile-email').value.trim();
+      if (emailVal) payload.email = emailVal;
+      await api.put(`/api/admin/users/${user.id}/profile`, payload);
+      closeModal();
+      toast('Профиль обновлён');
+      reload();
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.classList.add('show');
+    }
+  });
 }
 
 function openNotifyModal(userId) {

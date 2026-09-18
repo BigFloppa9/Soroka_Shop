@@ -63,11 +63,11 @@ a { color: inherit; }
 .admin-sidebar button.active { background: var(--gold); color: #1E2A28; }
 .admin-sidebar .exit { margin-top: auto; color: #E29AA4; }
 
-.admin-main { padding: 28px 34px; max-width: 1100px; }
+.admin-main { padding: 28px 34px; }
 .admin-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
 .admin-topbar .who { font-size: 12.5px; color: var(--muted); }
 
-.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 28px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 28px; }
 .stat-card { background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 16px 18px; }
 .stat-card .num { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; }
 .stat-card .label { font-size: 12px; color: var(--muted); font-weight: 600; }
@@ -77,6 +77,20 @@ a { color: inherit; }
 .overview-panel h4 { margin: 0 0 10px; font-size: 13px; }
 .overview-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .overview-list li { font-size: 13px; line-height: 1.4; }
+.overview-list li.overview-link { cursor: pointer; }
+.overview-list li.overview-link:hover { color: var(--teal-dark); }
+
+.coupon-discount-row { display: flex; gap: 8px; }
+.coupon-discount-row input { flex: 1; }
+.unit-toggle { position: relative; flex-shrink: 0; }
+.unit-toggle button { height: 100%; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--paper-soft); font: inherit; font-size: 13.5px; cursor: pointer; min-width: 56px; }
+.unit-menu { position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--radius-s); box-shadow: 0 6px 16px rgba(0,0,0,.12); z-index: 20; min-width: 56px; }
+.unit-menu div { padding: 7px 12px; font-size: 13.5px; cursor: pointer; }
+.unit-menu div:hover { background: var(--paper-deep); }
+
+.info-tip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; border-radius: 50%; background: var(--paper-deep); color: var(--muted); font-size: 9px; font-weight: 700; vertical-align: super; cursor: help; margin-left: 4px; }
+.info-tip .info-tip-bubble { display: none; position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%); width: 220px; background: var(--ink); color: var(--paper-soft); font-size: 11.5px; font-weight: 400; line-height: 1.4; padding: 8px 10px; border-radius: var(--radius-s); z-index: 30; }
+.info-tip:hover .info-tip-bubble, .info-tip:focus .info-tip-bubble, .info-tip.show .info-tip-bubble { display: block; }
 
 .admin-table { width: 100%; border-collapse: collapse; background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--radius-m); overflow: hidden; }
 .admin-table th, .admin-table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }

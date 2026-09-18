@@ -20,6 +20,12 @@ function applySort(list, state, comparators) {
   return state.dir === 'desc' ? sorted.reverse() : sorted;
 }
 
+document.addEventListener('click', (e) => {
+  const tip = e.target.closest('.info-tip');
+  document.querySelectorAll('.info-tip.show').forEach(t => { if (t !== tip) t.classList.remove('show'); });
+  if (tip) { e.stopPropagation(); tip.classList.toggle('show'); }
+});
+
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }

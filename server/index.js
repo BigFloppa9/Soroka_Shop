@@ -103,7 +103,8 @@ app.use(async (req, res, next) => {
 app.get('/api/ping', (req, res) => res.json({ ok: true, t: Date.now() }));
 app.post('/api/captcha/verify', (req, res) => {
   res.cookie('captcha_ok', '1', { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 });
-  res.cookie('visited', '1', { httpOnly: true, sameSite: 'lax', maxAge: 365 * 24 * 60 * 60 * 1000 });
+  // Сессионная кука (без maxAge) — закрыл браузер/вкладку и зашёл заново -> снова считается первым визитом и капча покажется опять.
+  res.cookie('visited', '1', { httpOnly: true, sameSite: 'lax' });
   res.json({ ok: true });
 });
 

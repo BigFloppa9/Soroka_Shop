@@ -6,6 +6,24 @@ function isPrivateIp(ip) {
     ip.startsWith('10.') || ip.startsWith('172.16.') || ip.startsWith('::ffff:127.');
 }
 
+// Более агрессивная проверка: помимо явного флага "proxy"/"vpn" от сервисов,
+// смотрим на название провайдера/ASN — большинство коммерческих VPN и
+// прокси арендуют серверы у известных хостеров, так что по имени организации
+// их тоже можно поймать, даже если сам сервис не пометил IP как прокси.
+const HOSTING_KEYWORDS = [
+  'vpn', 'proxy', 'hosting', 'datacenter', 'data center', 'cloud', 'server',
+  'colo', 'digitalocean', 'ovh', 'hetzner', 'amazon', 'aws', 'azure',
+  'google cloud', 'linode', 'vultr', 'leaseweb', 'choopa', 'm247', 'contabo',
+  'packet', 'scaleway', 'oracle cloud', 'tor exit', 'nordvpn', 'expressvpn',
+  'surfshark', 'private internet access', 'protonvpn', 'mullvad', 'cyberghost',
+  'ipvanish', 'windscribe',
+];
+function looksLikeHosting(text) {
+  if (!text) return false;
+  const t = String(text).toLowerCase();
+  return HOSTING_KEYWORDS.some(k => t.includes(k));
+}
+
 async function fetchJson(url, timeoutMs = 2500) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -19,15 +37,16 @@ async function fetchJson(url, timeoutMs = 2500) {
 }
 
 async function checkProxycheck(ip) {
-  const data = await fetchJson(`https://proxycheck.io/v2/${ip}?vpn=1&asn=0`);
+  const data = await fetchJson(`https://proxycheck.io/v2/${ip}?vpn=1&asn=1`);
   const entry = data?.[ip];
-  return entry ? entry.proxy === 'yes' : null;
+  if (!entry) return null;
+  return entry.proxy === 'yes' || looksLikeHosting(entry.provider) || looksLikeHosting(entry.organisation);
 }
 
 async function checkIpApi(ip) {
-  const data = await fetchJson(`http://ip-api.com/json/${ip}?fields=proxy,hosting,status`);
+  const data = await fetchJson(`http://ip-api.com/json/${ip}?fields=proxy,hosting,isp,org,as,status`);
   if (data?.status !== 'success') return null;
-  return !!(data.proxy || data.hosting);
+  return !!(data.proxy || data.hosting || looksLikeHosting(data.isp) || looksLikeHosting(data.org) || looksLikeHosting(data.as));
 }
 
 async function isVpnOrProxy(ip) {

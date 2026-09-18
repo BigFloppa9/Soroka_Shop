@@ -3,7 +3,7 @@ const DELIVERY_LABELS = { courier: 'Курьером', pickup: 'Самовыво
 const PAYMENT_LABELS = { card_online: 'Картой онлайн', sbp: 'СБП', card_on_delivery: 'Картой при получении', cash_on_delivery: 'Наличными при получении' };
 
 document.addEventListener('DOMContentLoaded', async () => {
-  await Site.ready;
+  await Site.userReady;
   const root = document.getElementById('account-root');
 
   if (!Site.user) {
@@ -52,18 +52,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     stopLive();
     const content = document.getElementById('account-content');
     content.innerHTML = '<div class="skeleton" style="height:160px;"></div>';
-    if (tab === 'orders') {
-      await renderOrders(content);
-      startLive(() => renderOrders(content, true), 6000);
-      return;
+    try {
+      if (tab === 'orders') {
+        await renderOrders(content);
+        startLive(() => renderOrders(content, true), 6000);
+        return;
+      }
+      if (tab === 'favorites') {
+        await Site.ready; // тут нужен точный Site.favoriteIds, а не только Site.user
+        await renderFavorites(content);
+        startLive(() => renderFavorites(content, true), 8000);
+        return;
+      }
+      if (tab === 'reviews') return await renderMyReviews(content);
+      if (tab === 'profile') return await renderProfile(content);
+    } catch (e) {
+      content.innerHTML = `<p>Не удалось отобразить раздел. <button class="btn btn-outline btn-sm" id="retry-tab-btn">Повторить</button></p>`;
+      document.getElementById('retry-tab-btn')?.addEventListener('click', () => loadTab(tab));
     }
-    if (tab === 'favorites') {
-      await renderFavorites(content);
-      startLive(() => renderFavorites(content, true), 8000);
-      return;
-    }
-    if (tab === 'reviews') return renderMyReviews(content);
-    if (tab === 'profile') return renderProfile(content);
   }
 
   async function renderOrders(content, silent) {
